@@ -7,6 +7,7 @@ import { SignupPage } from '@/pages/SignupPage';
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { GatePage } from '@/pages/GatePage';
+import { StackedPage } from '@/pages/StackedPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -32,6 +33,7 @@ function AppRoutes() {
       <Route path="/genesis" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/unobfuscated" element={<ProtectedRoute><UnobfuscatedPage /></ProtectedRoute>} />
+      <Route path="/stacked" element={<ProtectedRoute><StackedPage /></ProtectedRoute>} />
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
       <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
