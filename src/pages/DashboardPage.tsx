@@ -405,16 +405,45 @@ function FileDetailModal({
 
 function ObfuscateAnalytics() {
   const [files, setFiles] = useState<File[]>([]);
+  const [executionsToday, setExecutionsToday] = useState(0);
+  const [totalExecutions, setTotalExecutions] = useState(0);
+  const [hourly, setHourly] = useState<number[]>(Array.from({ length: 24 }, () => 0));
+
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from('files').select('*');
       setFiles((data as File[]) ?? []);
+
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count: todayCount } = await supabase
+        .from('execution_logs')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', since);
+      setExecutionsToday(todayCount ?? 0);
+
+      const totalExec = (data as File[] ?? []).reduce((a, f) => a + (f.executions ?? 0), 0);
+      setTotalExecutions(totalExec);
+
+      // Build hourly bar chart from execution_logs in last 24h
+      const { data: logs } = await supabase
+        .from('execution_logs')
+        .select('created_at')
+        .gte('created_at', since)
+        .order('created_at', { ascending: true });
+      const buckets = Array.from({ length: 24 }, () => 0);
+      const now = Date.now();
+      for (const log of (logs ?? []) as { created_at: string }[]) {
+        const hourAgo = Math.floor((now - new Date(log.created_at).getTime()) / (60 * 60 * 1000));
+        if (hourAgo >= 0 && hourAgo < 24) buckets[23 - hourAgo]++;
+      }
+      setHourly(buckets);
     })();
   }, []);
 
   const total = files.length;
   const obfuscated = files.filter(f => f.obfuscated).length;
   const pending = total - obfuscated;
+  const maxHour = Math.max(...hourly, 1);
 
   return (
     <div className="space-y-4">
@@ -423,7 +452,7 @@ function ObfuscateAnalytics() {
           { label: 'Total files', value: total },
           { label: 'Obfuscated', value: obfuscated },
           { label: 'Pending', value: pending },
-          { label: 'Executions', value: 0 },
+          { label: 'Executions today', value: executionsToday },
         ].map(s => (
           <Card key={s.label} className="p-5">
             <p className="text-xs text-white/40">{s.label}</p>
@@ -432,11 +461,20 @@ function ObfuscateAnalytics() {
         ))}
       </div>
       <Card className="p-6">
-        <p className="text-sm font-medium text-white">File activity</p>
-        <div className="mt-6 flex items-end gap-2 h-40">
-          {Array.from({ length: 24 }).map((_, i) => (
-            <div key={i} className="flex-1 rounded-t bg-white/[0.06]" style={{ height: `${20 + Math.sin(i * 0.5) * 30 + 20}%` }} />
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-white">Executions (last 24 hours)</p>
+          <span className="text-xs text-white/40">{totalExecutions} total all-time</span>
+        </div>
+        <div className="mt-6 flex items-end gap-1 h-40">
+          {hourly.map((count, i) => (
+            <div key={i} className="flex-1 rounded-t bg-white/[0.06] hover:bg-white/[0.12] transition-colors relative group" style={{ height: `${(count / maxHour) * 100}%`, minHeight: count > 0 ? '4px' : '0' }}>
+              <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-white/0 group-hover:text-white/60 transition-colors whitespace-nowrap">{count}</span>
+            </div>
           ))}
+        </div>
+        <div className="mt-2 flex justify-between text-xs text-white/30">
+          <span>24h ago</span>
+          <span>Now</span>
         </div>
       </Card>
     </div>
@@ -496,6 +534,9 @@ function OracleView() {
 
 function OracleServices() {
   const [services, setServices] = useState<Service[]>([]);
+  const [totalKeys, setTotalKeys] = useState(0);
+  const [activeIntegrations, setActiveIntegrations] = useState(0);
+  const [executionsToday, setExecutionsToday] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showNew, setShowNew] = useState(false);
@@ -504,8 +545,16 @@ function OracleServices() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('services').select('*').order('updated_at', { ascending: false });
-    setServices((data as Service[]) ?? []);
+    const [svcRes, keysRes, intRes, execRes] = await Promise.all([
+      supabase.from('services').select('*').order('updated_at', { ascending: false }),
+      supabase.from('keys').select('id', { count: 'exact', head: true }),
+      supabase.from('integrations').select('id', { count: 'exact', head: true }),
+      supabase.from('execution_logs').select('id', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
+    ]);
+    setServices((svcRes.data as Service[]) ?? []);
+    setTotalKeys(keysRes.count ?? 0);
+    setActiveIntegrations(intRes.count ?? 0);
+    setExecutionsToday(execRes.count ?? 0);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -529,8 +578,8 @@ function OracleServices() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { label: 'Total services', value: services.length, sub: 'Active integrations' },
-          { label: 'Total keys', value: 0, sub: 'Across all services' },
-          { label: 'Executions today', value: services.reduce((a, s) => a + s.executions, 0), sub: 'Last 24 hours' },
+          { label: 'Total keys', value: totalKeys, sub: 'Across all services' },
+          { label: 'Executions today', value: executionsToday, sub: 'Last 24 hours real stats' },
         ].map(s => (
           <Card key={s.label} className="px-6 py-5">
             <p className="text-xs text-white/40">{s.label}</p>
@@ -723,6 +772,7 @@ function OracleKeys() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showNew, setShowNew] = useState(false);
+  const [sub, setSub] = useState<'keys' | 'analytics'>('keys');
   const [newService, setNewService] = useState('');
   const [newNote, setNewNote] = useState('');
   const [newHwid, setNewHwid] = useState('');
@@ -778,9 +828,13 @@ function OracleKeys() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-1 w-fit">
-        <TabButton label="Keys" active={true} onClick={() => {}} />
-        <TabButton label="Analytics" active={false} onClick={() => {}} />
+        <TabButton label="Keys" active={sub === 'keys'} onClick={() => setSub('keys')} />
+        <TabButton label="Analytics" active={sub === 'analytics'} onClick={() => setSub('analytics')} />
       </div>
+      {sub === 'analytics' ? (
+        <OracleKeysAnalytics keys={keys} services={services} />
+      ) : (
+      <>
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 h-3.5 w-3.5" />
@@ -858,6 +912,51 @@ function OracleKeys() {
           )}
         </div>
       </Card>
+      </>
+      )}
+    </div>
+  );
+}
+
+function OracleKeysAnalytics({ keys, services }: { keys: Key[]; services: Service[] }) {
+  const activeKeys = keys.filter(k => k.status === 'active').length;
+  const revokedKeys = keys.filter(k => k.status !== 'active').length;
+  const totalUses = keys.reduce((a, k) => a + (k.uses ?? 0), 0);
+  const keysByService = services.map(s => ({ name: s.name, count: keys.filter(k => k.service_id === s.id).length }));
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total keys', value: keys.length },
+          { label: 'Active', value: activeKeys },
+          { label: 'Revoked', value: revokedKeys },
+          { label: 'Total uses', value: totalUses },
+        ].map(s => (
+          <Card key={s.label} className="p-5">
+            <p className="text-xs text-white/40">{s.label}</p>
+            <p className="mt-2 text-2xl font-semibold text-white">{s.value}</p>
+          </Card>
+        ))}
+      </div>
+      <Card className="p-6">
+        <p className="text-sm font-medium text-white">Keys by service</p>
+        <div className="mt-4 space-y-3">
+          {keysByService.length === 0 ? (
+            <p className="text-sm text-white/40">No services yet.</p>
+          ) : keysByService.map(s => (
+            <div key={s.name}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm text-white/70">{s.name}</span>
+                <span className="text-xs text-white/40">{s.count} keys</span>
+              </div>
+              <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                <div className="h-full rounded-full bg-white/20" style={{ width: `${keys.length > 0 ? (s.count / keys.length) * 100 : 0}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }
@@ -882,16 +981,23 @@ type ProviderName = (typeof MONETIZATION_PROVIDERS)[number]['name'];
 
 function OracleMonetization() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('integrations').select('*').order('created_at', { ascending: false });
-    setIntegrations((data as Integration[]) ?? []);
+    const [intRes, svcRes] = await Promise.all([
+      supabase.from('integrations').select('*').order('created_at', { ascending: false }),
+      supabase.from('services').select('*'),
+    ]);
+    setIntegrations((intRes.data as Integration[]) ?? []);
+    setServices((svcRes.data as Service[]) ?? []);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  const svcName = (id: string | null) => services.find(s => s.id === id)?.name ?? 'No service';
 
   const removeIntegration = async (id: string) => {
     await supabase.from('integrations').delete().eq('id', id);
@@ -952,7 +1058,7 @@ function OracleMonetization() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-white">{i.display_name || i.provider}</p>
-                        <p className="text-xs text-white/40">{i.provider} · Connected {timeAgo(i.created_at)}</p>
+                        <p className="text-xs text-white/40">{i.provider} · {svcName(i.service_id)} · Connected {timeAgo(i.created_at)}</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -975,6 +1081,8 @@ function OracleMonetization() {
 function NewIntegrationModal({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<'select' | 'configure'>('select');
   const [provider, setProvider] = useState<ProviderName | null>(null);
+  const [services, setServices] = useState<Service[]>([]);
+  const [serviceId, setServiceId] = useState('');
   const [form, setForm] = useState({
     display_name: '',
     api_key: '',
@@ -990,6 +1098,13 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
 
   const selected = MONETIZATION_PROVIDERS.find(p => p.name === provider);
 
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('services').select('*').order('name');
+      setServices((data as Service[]) ?? []);
+    })();
+  }, []);
+
   const addCheckpoint = () => {
     if (!cpName.trim()) return;
     const url = generateVerificationUrl();
@@ -1004,6 +1119,7 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
   const save = async () => {
     if (!provider) return;
     setError('');
+    if (!serviceId) { setError('You must select a service to connect this integration to'); return; }
     const needsKey = selected?.fields.includes('api_key');
     const needsPub = selected?.fields.includes('publisher_id');
     if (needsKey && !form.api_key.trim()) { setError('API key is required'); return; }
@@ -1020,6 +1136,7 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
       key_expiry_days: form.key_expiry_days,
       daily_key_limit: form.daily_key_limit,
       checkpoints,
+      service_id: serviceId,
       status: 'connected',
     });
     setSaving(false);
@@ -1088,6 +1205,19 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
               <a href={selected.docs} target="_blank" rel="noreferrer" className="text-xs text-white/40 hover:text-white flex items-center gap-1">
                 Docs <ExternalLink className="h-3 w-3" />
               </a>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-white/40 mb-1.5">Service <span className="text-red-400">*</span></label>
+              <select
+                value={serviceId}
+                onChange={e => setServiceId(e.target.value)}
+                className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white outline-none focus:border-white/20"
+              >
+                <option value="">Select a service…</option>
+                {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <p className="text-xs text-white/30 mt-1">This integration must be linked to one of your Oracle services.</p>
             </div>
 
             <div>

@@ -38,7 +38,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/files?slug=eq.${encodeURIComponent(slug)}&select=content,obfuscated_content,obfuscated,unobfuscated_content&limit=1`,
+    `${SUPABASE_URL}/rest/v1/files?slug=eq.${encodeURIComponent(slug)}&select=id,content,obfuscated_content,obfuscated,unobfuscated_content,service_id&limit=1`,
     {
       headers: {
         apikey: SERVICE_ROLE_KEY,
@@ -56,8 +56,40 @@ Deno.serve(async (req: Request) => {
   }
 
   const file = data[0];
-  // Always serve obfuscated content if available — this is what executors should run
   const content = file.obfuscated ? (file.obfuscated_content || file.content) : file.content;
+
+  // Heartbeat: log this execution and increment the file's execution counter
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/execution_logs`, {
+      method: "POST",
+      headers: {
+        apikey: SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        file_id: file.id,
+        service_id: file.service_id || null,
+      }),
+    });
+
+    await fetch(`${SUPABASE_URL}/rest/v1/files?id=eq.${file.id}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        executions: (file.executions ?? 0) + 1,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+  } catch {
+    // Logging is best-effort; don't fail the script serving
+  }
 
   return new Response(content || "-- Empty script", {
     headers: {

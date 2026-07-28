@@ -53,6 +53,7 @@ export type Integration = {
   key_expiry_days: number;
   daily_key_limit: number;
   checkpoints: { name: string; url: string }[];
+  service_id: string | null;
 };
 
 export type File = {
@@ -67,6 +68,7 @@ export type File = {
   slug: string;
   version: number;
   parent_file_id: string | null;
+  executions: number;
   created_at: string;
   updated_at: string;
 };

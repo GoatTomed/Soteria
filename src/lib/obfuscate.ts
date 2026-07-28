@@ -361,23 +361,35 @@ function extractLuaStrings(src: string): string[] {
  * byte streams so the logic is readable.
  */
 function decodeWeAreDevs(src: string): string {
-  // Locate the r-table: local r={...}
-  const rTableMatch = src.match(/local\s+\w+\s*=\s*\{([\s\S]*?)\}/);
-  if (!rTableMatch) return src;
+  // WeAreDevs obfuscator wraps scripts in: return(function(...)local r={...} ... end)
+  // The r-table holds string entries with \DDD decimal byte escapes.
+  // Each string is a fragment of the original source, reassembled by the
+  // ipairs loop via string.char + table.concat.
 
-  const rTableContent = rTableMatch[1];
+  // Extract the r-table content — match from "local <var> = {" to the matching "}"
+  // We use a balanced brace search because the table content itself contains "}"
+  const localMatch = src.match(/local\s+(\w+)\s*=\s*\{/);
+  if (!localMatch) return src;
 
-  // Extract all quoted strings from the r-table and decode their \DDD escapes
-  const decoded = extractLuaStrings('"' + rTableContent.replace(/",\s*"/g, '" "') + '"');
+  const tableStart = src.indexOf(localMatch[0]) + localMatch[0].length - 1; // position of "{"
+  let depth = 0;
+  let tableEnd = tableStart;
+  for (let i = tableStart; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') {
+      depth--;
+      if (depth === 0) { tableEnd = i; break; }
+    }
+  }
+  const tableContent = src.slice(tableStart + 1, tableEnd);
 
-  if (decoded.length === 0) return src;
+  // Extract all double-quoted string literals from the table content
+  const strings = extractLuaStrings(tableContent);
+  if (strings.length === 0) return src;
 
-  // The decoded strings are byte runs that reconstitute the original script
-  // when concatenated in the order the ipairs loop visits them.
-  // We join them and return the readable result.
-  const joined = decoded.join('');
+  // The decoded strings are byte fragments that reconstitute the original source
+  const joined = strings.join('');
 
-  // Clean up: the joined result is usually valid Lua source
   return joined.trim() || src;
 }
 
