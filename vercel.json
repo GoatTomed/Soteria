@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/:id(\\d+)", "destination": "https://qqnnaknwszrigxwrlvxd.supabase.co/functions/v1/serve-script/:id" },
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}
