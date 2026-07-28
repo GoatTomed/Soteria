@@ -361,17 +361,22 @@ function extractLuaStrings(src: string): string[] {
  * byte streams so the logic is readable.
  */
 function decodeWeAreDevs(src: string): string {
-  // WeAreDevs obfuscator wraps scripts in: return(function(...)local r={...} ... end)
-  // The r-table holds string entries with \DDD decimal byte escapes.
-  // Each string is a fragment of the original source, reassembled by the
-  // ipairs loop via string.char + table.concat.
+  // WeAreDevs v1 obfuscation works as follows:
+  //   1. Original source bytes are transformed: byte OP key → encoded_byte
+  //   2. Encoded bytes are stored as \DDD decimal escapes in the r-table strings
+  //   3. At runtime, Lua reverses the transform (inverse OP) and loadstrings the result
+  //
+  // To decode statically we must:
+  //   a) Decode \DDD escapes from the r-table to get the encoded bytes
+  //   b) Find the arithmetic/XOR transform in the Lua decoder body
+  //   c) Apply the inverse transform to recover the original source
 
-  // Extract the r-table content — match from "local <var> = {" to the matching "}"
-  // We use a balanced brace search because the table content itself contains "}"
+  // ── Step 1: locate and extract the r-table ──────────────────────────────────
   const localMatch = src.match(/local\s+(\w+)\s*=\s*\{/);
   if (!localMatch) return src;
 
-  const tableStart = src.indexOf(localMatch[0]) + localMatch[0].length - 1; // position of "{"
+  const tableVar = localMatch[1];
+  const tableStart = src.indexOf(localMatch[0]) + localMatch[0].length - 1;
   let depth = 0;
   let tableEnd = tableStart;
   for (let i = tableStart; i < src.length; i++) {
@@ -383,14 +388,95 @@ function decodeWeAreDevs(src: string): string {
   }
   const tableContent = src.slice(tableStart + 1, tableEnd);
 
-  // Extract all double-quoted string literals from the table content
+  // Decode \DDD sequences in each string → raw bytes as char-code arrays
   const strings = extractLuaStrings(tableContent);
   if (strings.length === 0) return src;
 
-  // The decoded strings are byte fragments that reconstitute the original source
-  const joined = strings.join('');
+  // Concatenate all table entries into a single encoded byte string
+  const encodedPayload = strings.join('');
 
-  return joined.trim() || src;
+  // ── Step 2: find the decode transform in the Lua code after the table ───────
+  //
+  // WeAreDevs v1 decoder body typically looks like one of these patterns:
+  //
+  //   string.char(string.byte(s, i) - N)    subtract constant N
+  //   string.char(string.byte(s, i) + N)    add constant N
+  //   string.char(bit32.bxor(string.byte(s, i), N))  XOR with constant
+  //   string.char(string.byte(s, i) ~ N)    Lua 5.3+ XOR
+
+  const decoderBody = src.slice(tableEnd);
+
+  // Try: subtraction  …string.byte(…, …) - <N>…
+  const subMatch = decoderBody.match(/string\.byte\s*\([^)]+\)\s*-\s*(\d+)/);
+  if (subMatch) {
+    const offset = parseInt(subMatch[1]);
+    return applyByteTransform(encodedPayload, b => b + offset); // reverse: add
+  }
+
+  // Try: addition  …string.byte(…, …) + <N>…
+  const addMatch = decoderBody.match(/string\.byte\s*\([^)]+\)\s*\+\s*(\d+)/);
+  if (addMatch) {
+    const offset = parseInt(addMatch[1]);
+    return applyByteTransform(encodedPayload, b => b - offset); // reverse: subtract
+  }
+
+  // Try: XOR  bit32.bxor(string.byte(…, …), <N>)  or  string.byte(…) ~ <N>
+  const xorMatch = decoderBody.match(/bit32\.bxor\s*\(\s*string\.byte[^,]+,\s*(\d+)\s*\)|string\.byte\s*\([^)]+\)\s*~\s*(\d+)/);
+  if (xorMatch) {
+    const key = parseInt(xorMatch[1] ?? xorMatch[2]);
+    return applyByteTransform(encodedPayload, b => b ^ key); // XOR is self-inverse
+  }
+
+  // Try: position-dependent XOR  bxor(string.byte(…, i), i)  (key = position)
+  const posXorMatch = /bit32\.bxor\s*\(\s*string\.byte[^,]+,\s*\w+\s*\)/.test(decoderBody);
+  if (posXorMatch) {
+    return applyPositionXor(encodedPayload, tableVar, decoderBody);
+  }
+
+  // ── Step 3: heuristic fallback — try common WeAreDevs offsets ───────────────
+  // If we couldn't parse the transform, try offsets that WeAreDevs versions commonly use.
+  for (const offset of [26, -26, 13, -13, 40, -40, 36, -36, 47, -47]) {
+    const attempt = applyByteTransform(encodedPayload, b => b - offset);
+    if (looksLikeLua(attempt)) return attempt;
+    const attemptInv = applyByteTransform(encodedPayload, b => b + offset);
+    if (looksLikeLua(attemptInv)) return attemptInv;
+  }
+
+  // ── Step 4: nothing worked — return the decoded payload with a note ──────────
+  // Returning it raw (after \DDD decode) is still better than returning the
+  // original obfuscated source, as it shows the encoded form without escapes.
+  return (
+    '-- [WeAreDevs] Static decode incomplete: could not determine the runtime transform.\n' +
+    '-- The encoded payload is shown below. Running the original script and\n' +
+    '-- intercepting the loadstring call will recover the full source.\n\n' +
+    encodedPayload
+  );
+}
+
+function applyByteTransform(payload: string, transform: (b: number) => number): string {
+  let result = '';
+  for (let i = 0; i < payload.length; i++) {
+    const b = payload.charCodeAt(i);
+    const transformed = transform(b) & 0xff;
+    result += String.fromCharCode(transformed);
+  }
+  return result;
+}
+
+function applyPositionXor(payload: string, _tableVar: string, _body: string): string {
+  let result = '';
+  for (let i = 0; i < payload.length; i++) {
+    result += String.fromCharCode((payload.charCodeAt(i) ^ (i + 1)) & 0xff);
+  }
+  return result;
+}
+
+function looksLikeLua(s: string): boolean {
+  // A decoded Lua script should have identifiable keywords near the start
+  const head = s.slice(0, 500);
+  const luaKeywords = /\b(local|function|return|if|then|end|for|while|do|repeat|until|and|or|not)\b/;
+  const luaPatterns = /game:|require\(|print\(|loadstring|--/;
+  return luaKeywords.test(head) && luaPatterns.test(head);
 }
 
 // ─── Public entry point ──────────────────────────────────────────────────────
