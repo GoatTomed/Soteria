@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { DashboardShell, TabButton, PageTitle, Card } from '@/components/DashboardShell';
 import { supabase, type Service, type Script, type Key, type Integration, type File } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
@@ -10,13 +11,52 @@ import {
   Lock, Unlock, ExternalLink, XCircle, ClipboardPaste, Loader2,
 } from 'lucide-react';
 
+const VALID_TABS = ['obfuscate', 'utilities', 'oracle', 'genesis', 'settings'] as const;
+const ORACLE_SUBS = ['services', 'scripts', 'keys', 'monetization', 'log', 'guide'] as const;
+
+function pathToTab(pathname: string): { tab: string; oracleSub: string } {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts.length === 0) return { tab: 'obfuscate', oracleSub: 'services' };
+  const first = parts[0];
+  if (first === 'oracle') {
+    const sub = parts[1] && ORACLE_SUBS.includes(parts[1] as typeof ORACLE_SUBS[number]) ? parts[1] : 'services';
+    return { tab: 'oracle', oracleSub: sub };
+  }
+  if ((VALID_TABS as readonly string[]).includes(first)) {
+    return { tab: first, oracleSub: 'services' };
+  }
+  return { tab: 'obfuscate', oracleSub: 'services' };
+}
+
+function tabToPath(tab: string, oracleSub?: string): string {
+  if (tab === 'oracle') return oracleSub && oracleSub !== 'services' ? `/oracle/${oracleSub}` : '/oracle';
+  if (tab === 'obfuscate') return '/';
+  return `/${tab}`;
+}
+
 export function DashboardPage() {
-  const [tab, setTab] = useState('obfuscate');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams();
+  const { tab: urlTab, oracleSub } = pathToTab(location.pathname);
+  const [tab, setTab] = useState(urlTab);
+
+  // Sync from URL when browser back/forward is used
+  useEffect(() => {
+    const { tab: t } = pathToTab(location.pathname);
+    if (t !== tab) setTab(t);
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleTabChange = (newTab: string) => {
+    setTab(newTab);
+    navigate(tabToPath(newTab));
+  };
+
   return (
-    <DashboardShell breadcrumb={breadcrumbFor(tab)} activeTab={tab} onTabChange={setTab}>
+    <DashboardShell breadcrumb={breadcrumbFor(tab)} activeTab={tab} onTabChange={handleTabChange}>
       {tab === 'obfuscate' && <ObfuscateView />}
       {tab === 'utilities' && <UtilitiesView />}
-      {tab === 'oracle' && <OracleView />}
+      {tab === 'oracle' && <OracleView initialSub={oracleSub} onSubChange={(sub) => navigate(tabToPath('oracle', sub))} />}
       {tab === 'genesis' && <GenesisView />}
       {tab === 'settings' && <SettingsView />}
     </DashboardShell>
@@ -24,6 +64,10 @@ export function DashboardPage() {
 }
 
 function breadcrumbFor(tab: string): string {
+  if (tab === 'oracle') return 'Soteria / Oracle';
+  if (tab === 'genesis') return 'Soteria / Genesis';
+  if (tab === 'utilities') return 'Soteria / Utilities';
+  if (tab === 'settings') return 'Soteria / Settings';
   return 'Soteria';
 }
 
@@ -509,16 +553,26 @@ function UtilitiesView() {
 
 /* ============ Oracle ============ */
 
-function OracleView() {
-  const [sub, setSub] = useState('services');
+function OracleView({ initialSub, onSubChange }: { initialSub: string; onSubChange: (sub: string) => void }) {
+  const [sub, setSub] = useState(initialSub);
   const subs = ['Services', 'Scripts', 'Keys', 'Monetization', 'Log', 'Guide'];
+
+  useEffect(() => {
+    setSub(initialSub);
+  }, [initialSub]);
+
+  const handleSubChange = (s: string) => {
+    setSub(s);
+    onSubChange(s);
+  };
+
   return (
     <div className="space-y-5 mb-2">
       <PageTitle>Oracle</PageTitle>
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-1 flex-wrap">
           {subs.map(s => (
-            <TabButton key={s} label={s} active={sub === s.toLowerCase()} onClick={() => setSub(s.toLowerCase())} />
+            <TabButton key={s} label={s} active={sub === s.toLowerCase()} onClick={() => handleSubChange(s.toLowerCase())} />
           ))}
         </div>
       </div>
