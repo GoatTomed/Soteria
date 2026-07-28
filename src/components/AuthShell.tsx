@@ -16,7 +16,7 @@ export function AuthShell({
         <div className="mb-8 text-center">
           <Link to="/" className="inline-flex items-center gap-2.5">
             <img
-              src="https://yt3.ggpht.com/OV2tg0DmV-NvTvzSr6bxSXMXRG8TMBTOJOzgBfHTzV2x0KPSLDP5yufzsmKEmzfovbSDd3A1=s240-c-k-c0x00ffffff-no-rj"
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663690201156/JENZdJJc5x8KiqieXexEyT/yousuck-logo-v3-UfpH3hrPHAYBWPNbmh6WvM.webp"
               alt="Soteria"
               className="h-10 w-10 rounded-[28%] object-cover"
             />

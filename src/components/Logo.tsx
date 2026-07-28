@@ -1,4 +1,4 @@
-const LOGO_URL = 'https://yt3.ggpht.com/OV2tg0DmV-NvTvzSr6bxSXMXRG8TMBTOJOzgBfHTzV2x0KPSLDP5yufzsmKEmzfovbSDd3A1=s240-c-k-c0x00ffffff-no-rj';
+const LOGO_URL = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663690201156/JENZdJJc5x8KiqieXexEyT/yousuck-logo-v3-UfpH3hrPHAYBWPNbmh6WvM.webp';
 
 export function Logo({ className = 'h-8 w-8' }: { className?: string }) {
   return (
