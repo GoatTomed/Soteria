@@ -1,16 +1,17 @@
 -- ============================================================
---  YouSuck — Key System (extracted)
+--  Soteria — Key System
 -- ============================================================
 
-local Players      = game:GetService("Players")
-local HttpService  = game:GetService("HttpService")
-local TweenService = game:GetService("TweenService")
+local Players           = game:GetService("Players")
+local HttpService       = game:GetService("HttpService")
+local TweenService      = game:GetService("TweenService")
+local UserInputService  = game:GetService("UserInputService")
 
 while not Players.LocalPlayer do task.wait(0.1) end
 local LocalPlayer = Players.LocalPlayer
 
 -- ── Constants ─────────────────────────────────────────────
-local KEY_FILE     = "yousuck_key.txt"
+local KEY_FILE     = "soteria_key.txt"
 local VALIDATE_URL = "https://yoursuck.vercel.app/api/verify-key"
 local GET_KEY_URL  = "https://yoursuck.vercel.app/"
 
@@ -131,7 +132,7 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ── ScreenGui ─────────────────────────────────────────────
 local ScreenGui = make("ScreenGui", {
-    Name            = "KeySystem",
+    Name            = "Soteria",
     ResetOnSpawn    = false,
     ZIndexBehavior  = Enum.ZIndexBehavior.Sibling,
     IgnoreGuiInset  = true,
@@ -150,15 +151,28 @@ local Overlay = make("Frame", {
 })
 make("UICorner", { CornerRadius = UDim.new(0, 12), Parent = Overlay })
 
--- Blocker: invisible button that absorbs clicks on the overlay
-local Blocker = make("TextButton", {
-    Name               = "Blocker",
-    Size               = UDim2.new(1, 0, 1, 0),
-    BackgroundTransparency = 1,
-    AutoButtonColor    = false,
-    Text               = "",
-    Parent             = Overlay,
-})
+-- ── Dragging support ─────────────────────────────────────
+local dragging, dragStart, startPos = false, nil, nil
+local function makeDraggable(dragHandle, dragTarget)
+    dragHandle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = dragTarget.Position
+        end
+    end)
+    dragHandle.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            dragTarget.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
 
 -- ── Key Card ──────────────────────────────────────────────
 local Card = make("Frame", {
@@ -171,13 +185,16 @@ local Card = make("Frame", {
 make("UICorner", { CornerRadius = UDim.new(0, 12), Parent = Card })
 make("UIStroke", { Color = Theme.Border, Thickness = 1, Parent = Card })
 
+-- Make the card draggable by the title bar area
+makeDraggable(Card, Card)
+
 -- ── Title ─────────────────────────────────────────────────
 make("TextLabel", {
     Name               = "Title",
     Size               = UDim2.new(1, -40, 0, 24),
     Position           = UDim2.new(0, 20, 0, 16),
     BackgroundTransparency = 1,
-    Text               = "Enter access key",
+    Text               = "Soteria",
     TextColor3         = Theme.Text,
     Font               = Enum.Font.Gotham,
     TextSize           = 18,
@@ -192,8 +209,8 @@ local KeyBox = make("TextBox", {
     Position           = UDim2.new(0, 20, 0, 72),
     BackgroundColor3   = Theme.Raised,
     BorderSizePixel    = 0,
-    Text               = "",
-    PlaceholderText    = "Your Key Here!",
+    Text               = "Your Key Here!",
+    PlaceholderText    = "",
     TextColor3         = Color3.fromRGB(255, 255, 255),
     PlaceholderColor3  = Theme.TextMid,
     Font               = Enum.Font.Gotham,
@@ -202,6 +219,18 @@ local KeyBox = make("TextBox", {
     Parent             = Card,
 })
 make("UICorner", { CornerRadius = UDim.new(0, 10), Parent = KeyBox })
+
+-- Clear placeholder text on focus so the player can type freely
+KeyBox.Focused:Connect(function()
+    if KeyBox.Text == "Your Key Here!" then
+        KeyBox.Text = ""
+    end
+end)
+KeyBox.FocusLost:Connect(function()
+    if KeyBox.Text:gsub("^%s*(.-)%s*$", "%1") == "" then
+        KeyBox.Text = "Your Key Here!"
+    end
+end)
 
 -- ── Status label ──────────────────────────────────────────
 local StatusLabel = make("TextLabel", {
@@ -280,6 +309,12 @@ local function setStatus(text)
     end
 end
 
+local function getKeyText()
+    local t = tostring(KeyBox.Text or "")
+    if t == "Your Key Here!" then return "" end
+    return t:gsub("^%s*(.-)%s*$", "%1")
+end
+
 local function showKeyOverlay(visible)
     if Overlay then
         Overlay.Visible = visible and true or false
@@ -297,30 +332,30 @@ local function validateKey(key, onResult)
 
     local norm = normalizeKey(key)
     if not norm:match("^[A-Z0-9][A-Z0-9][A-Z0-9]%-[A-Z0-9][A-Z0-9][A-Z0-9]%-[A-Z0-9][A-Z0-9][A-Z0-9]$") then
-        onResult(false, "Invalid key format. Expected 3 alphanumeric chars, dash, 3 chars, dash, 3 chars.")
+        onResult(false, "Key Invalid")
         return
     end
 
     if not hasHttp() then
-        onResult(false, "HTTP not available. Executor cannot reach validation server.")
+        onResult(false, "Key Invalid")
         return
     end
 
     setStatus("Validating...")
     local ok, body = safePost(VALIDATE_URL, { key = norm })
     if not ok or type(body) ~= "string" then
-        onResult(false, "Validation server unreachable or request failed.")
+        onResult(false, "Key Invalid")
         return
     end
 
     local decOk, data = pcall(function() return HttpService:JSONDecode(body) end)
     if not decOk or type(data) ~= "table" then
-        onResult(false, "Bad validation response from server.")
+        onResult(false, "Key Invalid")
         return
     end
 
     local isValid = data.valid == true or data.success == true or tostring(data.status or ""):lower() == "success"
-    local message = tostring(data.message or data.error or (isValid and "Access granted." or "Invalid key."))
+    local message = tostring(data.message or data.error or (isValid and "Access granted." or "Key Invalid"))
     onResult(isValid, message)
 end
 
@@ -341,8 +376,8 @@ end)
 
 ValidateBtn.MouseButton1Click:Connect(function()
     if validated then return end
-    local key = tostring(KeyBox.Text or ""):gsub("^%s*(.-)%s*$", "%1")
-    if key == "" then setStatus("Enter a key to continue."); return end
+    local key = getKeyText()
+    if key == "" then setStatus("Key Invalid"); return end
 
     setStatus("Validating...")
     task.spawn(function()
@@ -350,13 +385,13 @@ ValidateBtn.MouseButton1Click:Connect(function()
             if success then
                 validated = true
                 setStatus(message or "Access granted.")
-                local enteredKey = tostring(KeyBox.Text or ""):gsub("^%s*(.-)%s*$", "%1")
+                local enteredKey = getKeyText()
                 if enteredKey ~= "" and enteredKey ~= "test" then
                     saveKey(normalizeKey(enteredKey))
                 end
                 showKeyOverlay(false)
             else
-                setStatus(message or "Invalid key.")
+                setStatus("Key Invalid")
             end
         end)
     end)
@@ -365,7 +400,6 @@ end)
 -- ── Auto-validate saved key (silently, no expired message) ─
 local savedKey = getSavedKey()
 if savedKey and savedKey ~= "" then
-    KeyBox.Text = savedKey
     Overlay.Visible = false
     task.spawn(function()
         task.wait(0.2)
@@ -376,10 +410,12 @@ if savedKey and savedKey ~= "" then
                 saveKey(normalizeKey(savedKey))
             else
                 showKeyOverlay(true)
-                setStatus("Enter your key to use this script.")
+                KeyBox.Text = "Your Key Here!"
+                setStatus("")
             end
         end)
     end)
 else
     Overlay.Visible = true
+    KeyBox.Text = "Your Key Here!"
 end
