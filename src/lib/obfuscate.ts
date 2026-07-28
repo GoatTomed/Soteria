@@ -360,22 +360,135 @@ function extractLuaStrings(src: string): string[] {
  * What we CAN do is decode every string literal and present the decoded
  * byte streams so the logic is readable.
  */
-function decodeWeAreDevs(src: string): string {
-  // WeAreDevs v1.0.0 uses a bytecode VM obfuscator:
-  //   1. Original Lua source is compiled into custom bytecode
-  //   2. The bytecode is base64-encoded and stored as \DDD escape strings in the r-table
-  //   3. A custom virtual machine (the decoder body) interprets the bytecode at runtime
-  //
-  // There are no string.char, string.byte, loadstring, or XOR operations.
-  // The original source cannot be recovered through simple arithmetic transforms.
-  //
-  // What we CAN do statically:
-  //   a) Decode the \DDD escapes to get the base64 strings
-  //   b) Base64-decode them to get the raw bytecode
-  //   c) Extract readable string constants embedded in the bytecode
-  //   d) Return those strings with a clear explanation
+function disassembleWeAreDevsVM(src: string): string {
+  const lines: string[] = [
+    '-- [WeAreDevs VM Disassembly]',
+    '-- Decoded VM bytecode with resolved arithmetic and pattern mapping.',
+    '-- This is pseudocode, not exact original source.',
+    '',
+  ];
 
-  // ── Step 1: locate and extract the r-table ──────────────────────────────────
+  let body = src;
+
+  const rTableMatch = body.match(/local\s+(\w+)\s*=\s*\{([\s\S]*?)\}/);
+  if (rTableMatch) {
+    const rVar = rTableMatch[1];
+    const rContent = rTableMatch[2];
+    const strings = extractLuaStrings(rContent);
+    lines.push(`-- r-table (${rVar}): ${strings.length} entries`);
+    const decodedChunks: Buffer[] = [];
+    for (const entry of strings) {
+      try {
+        const buf = Buffer.from(entry, 'base64');
+        if (buf.length > 0) decodedChunks.push(buf);
+      } catch { /* skip */ }
+    }
+    if (decodedChunks.length > 0) {
+      const bytecode = Buffer.concat(decodedChunks);
+      lines.push(`-- Decoded bytecode: ${bytecode.length} bytes`);
+      const stringConstants: string[] = [];
+      let current = '';
+      for (let i = 0; i < bytecode.length; i++) {
+        const b = bytecode[i];
+        if (b >= 0x20 && b <= 0x7e) current += String.fromCharCode(b);
+        else { if (current.length >= 4) stringConstants.push(current); current = ''; }
+      }
+      if (current.length >= 4) stringConstants.push(current);
+      if (stringConstants.length > 0) {
+        lines.push('-- Embedded string constants:');
+        for (const s of stringConstants) lines.push(`--   "${s}"`);
+        lines.push('');
+      }
+    }
+    body = body.slice(rTableMatch.index! + rTableMatch[0].length);
+  }
+
+  let result = body;
+
+  result = result.replace(/(-?\d+)\s*([+\-])\s*(-?\d+)/g, (_m, a, op, b) => {
+    const av = parseInt(a, 10), bv = parseInt(b, 10);
+    return String(op === '+' ? av + bv : av - bv);
+  });
+
+  // Repeat arithmetic resolution until stable
+  for (let pass = 0; pass < 5; pass++) {
+    const prev = result;
+    result = result.replace(/(-?\d+)\s*([+\-])\s*(-?\d+)/g, (_m, a, op, b) => {
+      const av = parseInt(a, 10), bv = parseInt(b, 10);
+      return String(op === '+' ? av + bv : av - bv);
+    });
+    if (result === prev) break;
+  }
+
+  const patterns: { regex: RegExp; replacement: string; comment: string }[] = [
+    { regex: /local\s+(\w+)\s*=\s*\{(\s*\d+(?:\s*,\s*\d+)*\s*)\}/g, replacement: 'local $1 = "{$2}" -- byte array', comment: 'byte array' },
+    { regex: /(\w+)\s*=\s*(\w+)\s*\[\s*(\w+)\s*\[\s*(\d+)\s*\]\s*\]/g, replacement: '$1 = $2[$3[$4]]', comment: 'table lookup' },
+    { regex: /(\w+)\s*=\s*(\w+)\s*\[\s*(\d+)\s*\]/g, replacement: '$1 = $2[$3]', comment: 'direct index' },
+    { regex: /(\w+)\s*=\s*(\w+)\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, replacement: '$1 = $2($3, $4)', comment: 'function call' },
+    { regex: /(\w+)\s*=\s*(\w+)\s*\(\s*(\w+)\s*\)/g, replacement: '$1 = $2($3)', comment: 'function call' },
+    { regex: /(\w+)\s*=\s*#(\w+)/g, replacement: '$1 = #$2', comment: 'length' },
+    { regex: /for\s+(\w+)\s*=\s*(-?\d+)\s*,\s*#?(\w+)\s*,\s*(-?\d+)\s*do/g, replacement: 'for $1 = $2, #$3, $4 do', comment: 'numeric for' },
+    { regex: /for\s+(\w+)\s*=\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*do/g, replacement: 'for $1 = $2, $3, $4 do', comment: 'numeric for' },
+    { regex: /if\s+(\w+)\s+then/g, replacement: 'if $1 then', comment: 'if' },
+    { regex: /return\s+(\w+)\s*\(\s*(\w+)\s*\)/g, replacement: 'return $1($2)', comment: 'return call' },
+    { regex: /return\s+(\w+)/g, replacement: 'return $1', comment: 'return' },
+    { regex: /(\w+)\s*\[\s*(\w+)\s*\]\s*=\s*(\w+)\s*\[\s*(\w+)\s*\]\s*\+\s*(\d+)/g, replacement: '$1[$2] = $3[$4] + $5', comment: 'table add' },
+    { regex: /(\w+)\s*\[\s*(\w+)\s*\]\s*=\s*(\w+)\s*\[\s*(\w+)\s*\]\s*-\s*(\d+)/g, replacement: '$1[$2] = $3[$4] - $5', comment: 'table sub' },
+    { regex: /(\w+)\s*\[\s*(\w+)\s*\]\s*=\s*(\w+)\s*\[\s*(\w+)\s*\]/g, replacement: '$1[$2] = $3[$4]', comment: 'table copy' },
+    { regex: /(\w+)\s*\[\s*(\w+)\s*\]\s*=\s*(\d+)/g, replacement: '$1[$2] = $3', comment: 'table set' },
+    { regex: /(\w+)\s*\[\s*(\w+)\s*\]\s*=\s*nil/g, replacement: '$1[$2] = nil', comment: 'table nil' },
+    { regex: /(\w+),\s*(\w+)\s*=\s*(\w+)\s*\[\s*(\w+)\s*\]\s*,\s*(\d+)\s*\+\s*(\w+)/g, replacement: '$1, $2 = $3[$4], $5 + $6', comment: 'multi-assign' },
+    { regex: /(\w+),\s*(\w+)\s*=\s*(\w+)\s*\[\s*(\w+)\s*\]\s*-\s*(\d+)\s*,\s*(\d+)\s*\+\s*(\w+)/g, replacement: '$1, $2 = $3[$4] - $5, $6 + $7', comment: 'multi-assign' },
+    { regex: /local\s+function\s+(\w+)\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, replacement: 'local function $1($2, $3)', comment: 'local func' },
+    { regex: /local\s+(\w+)\s*=\s*function\s*\(\s*(\w+)\s*\)/g, replacement: 'local $1 = function($2)', comment: 'local func' },
+    { regex: /(\w+)\s*=\s*function\s*\(\s*(\w+)\s*\)/g, replacement: '$1 = function($2)', comment: 'func assign' },
+    { regex: /getfenv\s*\(\s*\)/g, replacement: 'getfenv()', comment: 'getfenv' },
+    { regex: /setmetatable\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, replacement: 'setmetatable($1, $2)', comment: 'setmetatable' },
+    { regex: /getmetatable\s*\(\s*(\w+)\s*\)/g, replacement: 'getmetatable($1)', comment: 'getmetatable' },
+    { regex: /unpack\s*\(\s*(\w+)\s*\)/g, replacement: 'unpack($1)', comment: 'unpack' },
+    { regex: /newproxy\s*\(\s*\)/g, replacement: 'newproxy()', comment: 'newproxy' },
+    { regex: /select\s*\(\s*(\w+)\s*,\s*\.\.\.\s*\)/g, replacement: 'select($1, ...)', comment: 'select' },
+    { regex: /table\s*\.\s*concat\s*\(\s*(\w+)\s*\)/g, replacement: 'table.concat($1)', comment: 'table.concat' },
+    { regex: /string\s*\.\s*char\s*\(\s*(\w+)\s*\)/g, replacement: 'string.char($1)', comment: 'string.char' },
+  ];
+
+  const statementLines = result.split(/([;\n])/).filter(s => s.trim() && s !== ';' && s !== '\n');
+  const output: string[] = [];
+  for (let line of statementLines) {
+    line = line.trim();
+    if (!line) continue;
+    let mapped = false;
+    for (const p of patterns) {
+      if (p.regex.test(line)) {
+        line = line.replace(p.regex, p.replacement);
+        mapped = true;
+      }
+    }
+    if (mapped || /^(local|if|for|while|return|end|function|do|else|elseif)/.test(line)) {
+      output.push(line);
+    } else if (/\w+\s*=/.test(line) || /\w+\(/.test(line) || /#/.test(line)) {
+      output.push(line);
+    }
+  }
+
+  lines.push('', '-- ── VM Instructions (resolved) ──', '');
+  if (output.length > 0) {
+    lines.push(...output);
+  } else {
+    lines.push('-- (Could not map VM instructions to readable form)');
+    lines.push('-- Raw resolved output:');
+    lines.push(result.trim().slice(0, 5000));
+  }
+
+  return lines.join('\n');
+}
+
+function decodeWeAreDevs(src: string): string {
+  const hasWatermark = src.includes('wearedevs.net/obfuscator');
+  const hasVMSig = /return\s*\(\s*function\s*\(\.\.\.\)\s*local\s+\w+\s*=\s*\{/.test(src);
+
+  if (!hasWatermark && !hasVMSig) return src;
+
   const localMatch = src.match(/local\s+(\w+)\s*=\s*\{/);
   if (!localMatch) return src;
 
@@ -384,94 +497,58 @@ function decodeWeAreDevs(src: string): string {
   let tableEnd = tableStart;
   for (let i = tableStart; i < src.length; i++) {
     if (src[i] === '{') depth++;
-    else if (src[i] === '}') {
-      depth--;
-      if (depth === 0) { tableEnd = i; break; }
-    }
+    else if (src[i] === '}') { depth--; if (depth === 0) { tableEnd = i; break; } }
   }
   const tableContent = src.slice(tableStart + 1, tableEnd);
-
-  // Decode \DDD sequences → base64 strings
   const strings = extractLuaStrings(tableContent);
   if (strings.length === 0) return src;
 
-  // ── Step 2: base64-decode each entry → raw bytecode ─────────────────────────
   const decodedChunks: Buffer[] = [];
   for (const entry of strings) {
     try {
       const buf = Buffer.from(entry, 'base64');
       if (buf.length > 0) decodedChunks.push(buf);
-    } catch { /* skip invalid */ }
+    } catch { /* skip */ }
   }
-  if (decodedChunks.length === 0) return src;
 
-  const bytecode = Buffer.concat(decodedChunks);
+  if (decodedChunks.length > 0) {
+    const bytecode = Buffer.concat(decodedChunks);
+    const stringConstants: string[] = [];
+    let current = '';
+    for (let i = 0; i < bytecode.length; i++) {
+      const b = bytecode[i];
+      if (b >= 0x20 && b <= 0x7e) current += String.fromCharCode(b);
+      else { if (current.length >= 4) stringConstants.push(current); current = ''; }
+    }
+    if (current.length >= 4) stringConstants.push(current);
 
-  // ── Step 3: extract readable string constants from the bytecode ─────────────
-  // String constants in VM bytecode often appear as contiguous runs of
-  // printable ASCII characters (4+ chars) surrounded by non-printable bytes.
-  const stringConstants: string[] = [];
-  let current = '';
-  for (let i = 0; i < bytecode.length; i++) {
-    const b = bytecode[i];
-    if (b >= 0x20 && b <= 0x7e) {
-      current += String.fromCharCode(b);
-    } else {
-      if (current.length >= 4) stringConstants.push(current);
-      current = '';
+    const hasVM = hasVMSig && !src.includes('string.char') && !src.includes('loadstring');
+
+    if (hasVM) {
+      return disassembleWeAreDevsVM(src);
+    }
+
+    if (stringConstants.length > 0) {
+      const lines = [
+        '-- [WeAreDevs v1.0.0] Bytecode VM',
+        '-- Extracted string constants:',
+        '',
+      ];
+      for (const s of stringConstants) lines.push(`-- "${s}"`);
+      return lines.join('\n');
     }
   }
-  if (current.length >= 4) stringConstants.push(current);
 
-  // ── Step 4: also check if the r-table entries themselves are readable ───────
-  // Some WeAreDevs versions store short string constants directly (not base64)
-  const directStrings = strings.filter(s => {
-    return s.length >= 4 && !/^[A-Za-z0-9+/=]+$/.test(s) && /[\x20-\x7E]/.test(s);
-  });
-
-  // ── Step 5: build the output ────────────────────────────────────────────────
-  const hasVM = /return\s*\(\s*function\s*\(\.\.\.\)\s*local\s+\w+\s*=\s*\{/.test(src) &&
-    !src.includes('string.char') &&
-    !src.includes('loadstring');
-
-  if (hasVM && stringConstants.length === 0 && directStrings.length === 0) {
-    // Pure VM bytecode with no extractable strings
-    return (
-      '-- [WeAreDevs v1.0.0] This script uses a bytecode virtual machine.\n' +
-      '-- The original source has been compiled into custom bytecode and cannot\n' +
-      '-- be recovered through static analysis alone. The bytecode is base64-encoded\n' +
-      '-- in the r-table and interpreted by a custom VM at runtime.\n' +
-      '--\n' +
-      '-- To recover the original source, you would need to either:\n' +
-      '--   1. Run the script in a Lua environment and intercept the VM execution\n' +
-      '--   2. Reverse-engineer the VM opcode dispatch table and write a disassembler\n' +
-      '--\n' +
-      '-- R-table entries: ' + strings.length + '\n' +
-      '-- Decoded bytecode size: ' + bytecode.length + ' bytes\n'
-    );
-  }
-
-  if (stringConstants.length > 0 || directStrings.length > 0) {
-    const allStrings = [...new Set([...directStrings, ...stringConstants])];
-    const lines = [
-      '-- [WeAreDevs v1.0.0] This script uses a bytecode virtual machine.',
-      '-- The original source cannot be fully recovered statically, but the following',
-      '-- string constants were extracted from the bytecode:',
-      '--',
-      '-- R-table entries: ' + strings.length,
-      '-- Decoded bytecode size: ' + bytecode.length + ' bytes',
-      '-- Extracted strings: ' + allStrings.length,
-      '--',
-      '',
-    ];
-    for (const s of allStrings) {
-      lines.push('-- ' + s);
-    }
+  const directStrings = strings.filter(s =>
+    s.length >= 4 && !/^[A-Za-z0-9+/=]+$/.test(s) && /[\x20-\x7E]/.test(s)
+  );
+  if (directStrings.length > 0) {
+    const lines = ['-- [WeAreDevs] Extracted strings:', ''];
+    for (const s of directStrings) lines.push(`-- ${s}`);
     return lines.join('\n');
   }
 
-  // Fallback: return the decoded base64 payload
-  return bytecode.toString('utf8');
+  return src;
 }
 
 // ─── Public entry point ──────────────────────────────────────────────────────
