@@ -361,21 +361,24 @@ function extractLuaStrings(src: string): string[] {
  * byte streams so the logic is readable.
  */
 function decodeWeAreDevs(src: string): string {
-  // WeAreDevs v1 obfuscation works as follows:
-  //   1. Original source bytes are transformed: byte OP key → encoded_byte
-  //   2. Encoded bytes are stored as \DDD decimal escapes in the r-table strings
-  //   3. At runtime, Lua reverses the transform (inverse OP) and loadstrings the result
+  // WeAreDevs v1.0.0 uses a bytecode VM obfuscator:
+  //   1. Original Lua source is compiled into custom bytecode
+  //   2. The bytecode is base64-encoded and stored as \DDD escape strings in the r-table
+  //   3. A custom virtual machine (the decoder body) interprets the bytecode at runtime
   //
-  // To decode statically we must:
-  //   a) Decode \DDD escapes from the r-table to get the encoded bytes
-  //   b) Find the arithmetic/XOR transform in the Lua decoder body
-  //   c) Apply the inverse transform to recover the original source
+  // There are no string.char, string.byte, loadstring, or XOR operations.
+  // The original source cannot be recovered through simple arithmetic transforms.
+  //
+  // What we CAN do statically:
+  //   a) Decode the \DDD escapes to get the base64 strings
+  //   b) Base64-decode them to get the raw bytecode
+  //   c) Extract readable string constants embedded in the bytecode
+  //   d) Return those strings with a clear explanation
 
   // ── Step 1: locate and extract the r-table ──────────────────────────────────
   const localMatch = src.match(/local\s+(\w+)\s*=\s*\{/);
   if (!localMatch) return src;
 
-  const tableVar = localMatch[1];
   const tableStart = src.indexOf(localMatch[0]) + localMatch[0].length - 1;
   let depth = 0;
   let tableEnd = tableStart;
@@ -388,95 +391,87 @@ function decodeWeAreDevs(src: string): string {
   }
   const tableContent = src.slice(tableStart + 1, tableEnd);
 
-  // Decode \DDD sequences in each string → raw bytes as char-code arrays
+  // Decode \DDD sequences → base64 strings
   const strings = extractLuaStrings(tableContent);
   if (strings.length === 0) return src;
 
-  // Concatenate all table entries into a single encoded byte string
-  const encodedPayload = strings.join('');
+  // ── Step 2: base64-decode each entry → raw bytecode ─────────────────────────
+  const decodedChunks: Buffer[] = [];
+  for (const entry of strings) {
+    try {
+      const buf = Buffer.from(entry, 'base64');
+      if (buf.length > 0) decodedChunks.push(buf);
+    } catch { /* skip invalid */ }
+  }
+  if (decodedChunks.length === 0) return src;
 
-  // ── Step 2: find the decode transform in the Lua code after the table ───────
-  //
-  // WeAreDevs v1 decoder body typically looks like one of these patterns:
-  //
-  //   string.char(string.byte(s, i) - N)    subtract constant N
-  //   string.char(string.byte(s, i) + N)    add constant N
-  //   string.char(bit32.bxor(string.byte(s, i), N))  XOR with constant
-  //   string.char(string.byte(s, i) ~ N)    Lua 5.3+ XOR
+  const bytecode = Buffer.concat(decodedChunks);
 
-  const decoderBody = src.slice(tableEnd);
+  // ── Step 3: extract readable string constants from the bytecode ─────────────
+  // String constants in VM bytecode often appear as contiguous runs of
+  // printable ASCII characters (4+ chars) surrounded by non-printable bytes.
+  const stringConstants: string[] = [];
+  let current = '';
+  for (let i = 0; i < bytecode.length; i++) {
+    const b = bytecode[i];
+    if (b >= 0x20 && b <= 0x7e) {
+      current += String.fromCharCode(b);
+    } else {
+      if (current.length >= 4) stringConstants.push(current);
+      current = '';
+    }
+  }
+  if (current.length >= 4) stringConstants.push(current);
 
-  // Try: subtraction  …string.byte(…, …) - <N>…
-  const subMatch = decoderBody.match(/string\.byte\s*\([^)]+\)\s*-\s*(\d+)/);
-  if (subMatch) {
-    const offset = parseInt(subMatch[1]);
-    return applyByteTransform(encodedPayload, b => b + offset); // reverse: add
+  // ── Step 4: also check if the r-table entries themselves are readable ───────
+  // Some WeAreDevs versions store short string constants directly (not base64)
+  const directStrings = strings.filter(s => {
+    return s.length >= 4 && !/^[A-Za-z0-9+/=]+$/.test(s) && /[\x20-\x7E]/.test(s);
+  });
+
+  // ── Step 5: build the output ────────────────────────────────────────────────
+  const hasVM = /return\s*\(\s*function\s*\(\.\.\.\)\s*local\s+\w+\s*=\s*\{/.test(src) &&
+    !src.includes('string.char') &&
+    !src.includes('loadstring');
+
+  if (hasVM && stringConstants.length === 0 && directStrings.length === 0) {
+    // Pure VM bytecode with no extractable strings
+    return (
+      '-- [WeAreDevs v1.0.0] This script uses a bytecode virtual machine.\n' +
+      '-- The original source has been compiled into custom bytecode and cannot\n' +
+      '-- be recovered through static analysis alone. The bytecode is base64-encoded\n' +
+      '-- in the r-table and interpreted by a custom VM at runtime.\n' +
+      '--\n' +
+      '-- To recover the original source, you would need to either:\n' +
+      '--   1. Run the script in a Lua environment and intercept the VM execution\n' +
+      '--   2. Reverse-engineer the VM opcode dispatch table and write a disassembler\n' +
+      '--\n' +
+      '-- R-table entries: ' + strings.length + '\n' +
+      '-- Decoded bytecode size: ' + bytecode.length + ' bytes\n'
+    );
   }
 
-  // Try: addition  …string.byte(…, …) + <N>…
-  const addMatch = decoderBody.match(/string\.byte\s*\([^)]+\)\s*\+\s*(\d+)/);
-  if (addMatch) {
-    const offset = parseInt(addMatch[1]);
-    return applyByteTransform(encodedPayload, b => b - offset); // reverse: subtract
+  if (stringConstants.length > 0 || directStrings.length > 0) {
+    const allStrings = [...new Set([...directStrings, ...stringConstants])];
+    const lines = [
+      '-- [WeAreDevs v1.0.0] This script uses a bytecode virtual machine.',
+      '-- The original source cannot be fully recovered statically, but the following',
+      '-- string constants were extracted from the bytecode:',
+      '--',
+      '-- R-table entries: ' + strings.length,
+      '-- Decoded bytecode size: ' + bytecode.length + ' bytes',
+      '-- Extracted strings: ' + allStrings.length,
+      '--',
+      '',
+    ];
+    for (const s of allStrings) {
+      lines.push('-- ' + s);
+    }
+    return lines.join('\n');
   }
 
-  // Try: XOR  bit32.bxor(string.byte(…, …), <N>)  or  string.byte(…) ~ <N>
-  const xorMatch = decoderBody.match(/bit32\.bxor\s*\(\s*string\.byte[^,]+,\s*(\d+)\s*\)|string\.byte\s*\([^)]+\)\s*~\s*(\d+)/);
-  if (xorMatch) {
-    const key = parseInt(xorMatch[1] ?? xorMatch[2]);
-    return applyByteTransform(encodedPayload, b => b ^ key); // XOR is self-inverse
-  }
-
-  // Try: position-dependent XOR  bxor(string.byte(…, i), i)  (key = position)
-  const posXorMatch = /bit32\.bxor\s*\(\s*string\.byte[^,]+,\s*\w+\s*\)/.test(decoderBody);
-  if (posXorMatch) {
-    return applyPositionXor(encodedPayload, tableVar, decoderBody);
-  }
-
-  // ── Step 3: heuristic fallback — try common WeAreDevs offsets ───────────────
-  // If we couldn't parse the transform, try offsets that WeAreDevs versions commonly use.
-  for (const offset of [26, -26, 13, -13, 40, -40, 36, -36, 47, -47]) {
-    const attempt = applyByteTransform(encodedPayload, b => b - offset);
-    if (looksLikeLua(attempt)) return attempt;
-    const attemptInv = applyByteTransform(encodedPayload, b => b + offset);
-    if (looksLikeLua(attemptInv)) return attemptInv;
-  }
-
-  // ── Step 4: nothing worked — return the decoded payload with a note ──────────
-  // Returning it raw (after \DDD decode) is still better than returning the
-  // original obfuscated source, as it shows the encoded form without escapes.
-  return (
-    '-- [WeAreDevs] Static decode incomplete: could not determine the runtime transform.\n' +
-    '-- The encoded payload is shown below. Running the original script and\n' +
-    '-- intercepting the loadstring call will recover the full source.\n\n' +
-    encodedPayload
-  );
-}
-
-function applyByteTransform(payload: string, transform: (b: number) => number): string {
-  let result = '';
-  for (let i = 0; i < payload.length; i++) {
-    const b = payload.charCodeAt(i);
-    const transformed = transform(b) & 0xff;
-    result += String.fromCharCode(transformed);
-  }
-  return result;
-}
-
-function applyPositionXor(payload: string, _tableVar: string, _body: string): string {
-  let result = '';
-  for (let i = 0; i < payload.length; i++) {
-    result += String.fromCharCode((payload.charCodeAt(i) ^ (i + 1)) & 0xff);
-  }
-  return result;
-}
-
-function looksLikeLua(s: string): boolean {
-  // A decoded Lua script should have identifiable keywords near the start
-  const head = s.slice(0, 500);
-  const luaKeywords = /\b(local|function|return|if|then|end|for|while|do|repeat|until|and|or|not)\b/;
-  const luaPatterns = /game:|require\(|print\(|loadstring|--/;
-  return luaKeywords.test(head) && luaPatterns.test(head);
+  // Fallback: return the decoded base64 payload
+  return bytecode.toString('utf8');
 }
 
 // ─── Public entry point ──────────────────────────────────────────────────────
