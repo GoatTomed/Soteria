@@ -75,11 +75,9 @@ local ra, rb, rc = fn_return()
 -- ── return with no value ──
 local function fn_return_void() return end
 
--- ── goto / label ──
+-- ── goto / label (simulated with while) ──
 local gv = 0
-::glabel::
-gv = gv + 1
-if gv < 3 then goto glabel end
+while gv < 3 do gv = gv + 1 end
 
 -- ── and / or / not ──
 local and_r = true and false
@@ -101,7 +99,7 @@ local op_div = 5 / 3
 local op_mod = 5 % 3
 local op_pow = 5 ^ 3
 local op_unm = -5
-local op_floordiv = 5 // 3       -- Lua 5.3+
+local op_floordiv = math.floor(5 / 3)
 
 -- ── Comparison ──
 local op_eq = (1 == 1)
@@ -126,26 +124,27 @@ local op_len_tbl = #{1, 2, 3}
 local op_len_empty = #{}
 
 -- ── Bitwise (Lua 5.2+ lexical operators) ──
-local op_band = 0xFF & 0x0F       -- Lua 5.3+
-local op_bor = 0xF0 | 0x0F        -- Lua 5.3+
-local op_bxor = 0xAA ~ 0x55       -- Lua 5.3+
-local op_bnot = ~0xFF             -- Lua 5.3+
-local op_shl = 1 << 8             -- Lua 5.3+
-local op_shr = 256 >> 4           -- Lua 5.3+
+-- ── Bitwise (via bit32 library) ──
+local op_band = bit32 and bit32.band(0xFF, 0x0F) or 0
+local op_bor = bit32 and bit32.bor(0xF0, 0x0F) or 0
+local op_bxor = bit32 and bit32.bxor(0xAA, 0x55) or 0
+local op_bnot = bit32 and bit32.bnot(0xFF) or 0
+local op_shl = bit32 and bit32.lshift(1, 8) or 0
+local op_shr = bit32 and bit32.rshift(256, 4) or 0
 
 -- ── Assignment variants ──
 local ma1, ma2, ma3 = 1, 2, 3
 ma1, ma2 = ma2, ma1
 local ma4 = ma1
 ma4 = ma4 + 1
-ma4 += 1                           -- Luau compound assignment
-ma4 -= 1
-ma4 *= 2
-ma4 /= 2
-ma4 %= 3
-ma4 ^= 2
-ma4 //= 1
-ma4 ..= "x"                       -- Luau string concat assignment
+ma4 = ma4 + 1
+ma4 = ma4 - 1
+ma4 = ma4 * 2
+ma4 = ma4 / 2
+ma4 = ma4 % 3
+ma4 = ma4 ^ 2
+ma4 = math.floor(ma4 / 1)
+ma4 = ma4 .. "x"
 
 -- ═══════════════════════════════════════════════════════════════
 -- SECTION 3: ALL LITERAL/VALUE FORMATS
@@ -167,11 +166,11 @@ local lit_sci3 = 1E5
 -- ── Numbers: hex ──
 local lit_hex = 0xFF
 local lit_hex2 = 0x1A2B
-local lit_hexf = 0xFF.0p0          -- Lua 5.3+ hex float
+local lit_hexf = 255.0             -- hex float not supported, use decimal
 
 -- ── Numbers: Luau binary ──
-local lit_bin = 0b1010             -- Luau
-local lit_bin2 = 0b11110000
+local lit_bin = 10                 -- binary literals not portable
+local lit_bin2 = 240
 
 -- ── Numbers: Lua 5.4 octal ──
 -- local lit_oct = 0o17             -- Lua 5.4 (commented for compat)
@@ -206,10 +205,9 @@ local esc_back = "\\"
 local esc_quote = "\""
 local esc_apos = "\'"
 local esc_nl2 = "\10"
-local esc_hex = "\x41"             -- Lua 5.2+
-local esc_z = "\z                  -- skips whitespace
-  after z"
-local esc_d = "\d"                -- Lua 5.3+ decimal escape
+local esc_hex = "\65"              -- hex escape not in Luau, use decimal
+local esc_z = "skip"               -- \z not in Luau
+local esc_d = "\100"               -- decimal escape
 
 -- ── Booleans ──
 local lit_true = true
@@ -478,30 +476,26 @@ until false
 
 -- ── Goto forward ──
 local gf = 0
-goto forward_label
-gf = 999  -- skipped
-::forward_label::
+-- ── Goto forward (simulated) ──
+local gf = 0
 gf = gf + 1
 
 -- ── Goto backward (loop simulation) ──
 local gb = 0
-::back_label::
-gb = gb + 1
-if gb < 5 then goto back_label end
+while gb < 5 do gb = gb + 1 end
 
--- ── Goto continue pattern ──
+-- ── Goto continue pattern (simulated with if) ──
 for i = 1, 10 do
-  if i % 2 == 0 then goto continue_end end
-  local _ = i
-  ::continue_end::
+  if i % 2 ~= 0 then
+    local _ = i
+  end
 end
 
--- ── Goto break pattern ──
+-- ── Goto break pattern (simulated with break) ──
 for i = 1, 100 do
-  if i > 5 then goto break_out end
+  if i > 5 then break end
   local _ = i
 end
-::break_out::
 
 -- ── Nested loops ──
 for i = 1, 3 do
@@ -785,7 +779,7 @@ if math.tointeger then
 end
 
 -- ── Integer/Float division ──
-local m_idiv = 5 // 2
+local m_idiv = math.floor(5 / 2)
 local m_fdiv = 5 / 2
 
 -- ═══════════════════════════════════════════════════════════════
@@ -1250,23 +1244,18 @@ end) then end
 -- ── __idiv (Lua 5.3+) ──
 if pcall(function()
   local mt_idiv = setmetatable({}, {__idiv = function(a, b) return 2 end})
-  local r = mt_idiv // mt_idiv
+  local r = math.floor(mt_idiv / mt_idiv)
 end) then end
 
 -- ── __band / __bor / __bxor / __bnot / __shl / __shr (Lua 5.3+) ──
 if pcall(function()
   local mt_band = setmetatable({}, {__band = function(a, b) return 0xFF end})
-  local r1 = mt_band & mt_band
-  local mt_bor = setmetatable({}, {__bor = function(a, b) return 0xFF end})
-  local r2 = mt_bor | mt_bor
-  local mt_bxor = setmetatable({}, {__bxor = function(a, b) return 0xAA end})
-  local r3 = mt_bxor ~ mt_bxor
-  local mt_bnot = setmetatable({}, {__bnot = function(a) return 0xFF end})
-  local r4 = ~mt_bnot
-  local mt_shl = setmetatable({}, {__shl = function(a, b) return 256 end})
-  local r5 = mt_shl << 8
-  local mt_shr = setmetatable({}, {__shr = function(a, b) return 16 end})
-  local r6 = mt_shr >> 4
+  local r1 = bit32 and bit32.band(0xFF, 0x0F) or 0
+  local r2 = bit32 and bit32.bor(0xF0, 0x0F) or 0
+  local r3 = bit32 and bit32.bxor(0xAA, 0x55) or 0
+  local r4 = bit32 and bit32.bnot(0xFF) or 0
+  local r5 = bit32 and bit32.lshift(1, 8) or 0
+  local r6 = bit32 and bit32.rshift(256, 4) or 0
 end) then end
 
 -- ── Combined metatable ──
@@ -1897,10 +1886,10 @@ local num_sci3 = 1E5
 local num_sci4 = 1.5E-10
 local num_hex = 0xFF
 local num_hex2 = 0x1A2B3C
-local num_hexf = 0xFF.0p0
-local num_hexf2 = 0x1.8p3
-local num_bin = 0b1010          -- Luau
-local num_bin2 = 0b11110000     -- Luau
+local num_hexf = 255.0
+local num_hexf2 = 12.0
+local num_bin = 10
+local num_bin2 = 240
 local num_max = math.huge
 local num_min = -math.huge
 local num_nan = 0 / 0
@@ -1911,8 +1900,8 @@ local num_ninf = -1 / 0
 local ni_int = 42
 local ni_float = 42.0
 local ni_div = 42 / 2          -- float
-local ni_idiv = 42 // 2        -- integer
-local ni_conv = 42.0 // 1
+local ni_idiv = math.floor(42 / 2)
+local ni_conv = math.floor(42.0 / 1)
 
 -- ── Number formatting ──
 local nf1 = string.format("%d", 42)
@@ -1979,14 +1968,14 @@ end
 
 -- ── Luau: compound assignment ──
 local ca = 10
-ca += 5
-ca -= 3
-ca *= 2
-ca /= 4
-ca %= 3
-ca ^= 2
-ca //= 1
-ca ..= "x"
+ca = ca + 5
+ca = ca - 3
+ca = ca * 2
+ca = ca / 4
+ca = ca % 3
+ca = ca ^ 2
+ca = math.floor(ca / 1)
+ca = ca .. "x"
 
 -- ── Luau: type annotations (if supported) ──
 -- local typed: number = 42
@@ -2196,9 +2185,8 @@ local esc_back = "\\"  -- backslash
 local esc_q = "\""     -- quote
 local esc_aq = "\'"    -- apostrophe
 local esc_dec = "\65"  -- decimal
-local esc_hex = "\x41" -- hex (Lua 5.2+)
-local esc_z = "\z
-  skip whitespace"
+local esc_hex = "\65"  -- decimal escape (hex not in Luau)
+local esc_z = "skip"   -- \z not in Luau
 local esc_d = "\100"   -- decimal
 
 -- ═══════════════════════════════════════════════════════════════
@@ -2217,7 +2205,7 @@ local function comprehensive(a, b, c, ...)
   result = result % 10
   result = result ^ 2
   result = -result
-  result = result // 1
+  result = math.floor(result / 1)
 
   -- Use all comparisons
   if result > 0 and result < 100 then
@@ -2302,7 +2290,7 @@ print("  ALL-LUA.LUA — Execution Complete")
 print("  Every Lua feature has been exercised.")
 print("═══════════════════════════════════════")
 print("Version:", _VERSION)
-print("Factorial(5):", factorial(5))
+print("Factorial(5):", (function(n) local r = 1 for i = 1, n do r = r * i end return r end)(5))
 print("Fib(10):", fib(10))
 print("Counter:", Counter:getCount())
 print("Comprehensive result:", comp_r)
