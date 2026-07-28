@@ -3,6 +3,7 @@ import { DashboardShell, TabButton, PageTitle, Card } from '@/components/Dashboa
 import { supabase, type Service, type Script, type Key, type Integration, type File } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { obfuscateLua, generateSlug, unobfuscateExternal } from '@/lib/obfuscate';
+import { generateKeySystemLua } from '@/lib/key-system';
 import {
   Search, ChevronDown, Plus, Link2, FileCode2, Eye, Sparkles,
   ShieldCheck, Trash2, Copy, Check, X, RefreshCw, Power, PowerOff,
@@ -115,7 +116,9 @@ function ObfuscateFiles() {
   const obfuscateFile = async (file: File) => {
     setObfuscating(file.id);
     const original = file.content || '';
-    const obfuscated = obfuscateLua(original);
+    const keySystem = generateKeySystemLua(file.slug);
+    const combined = keySystem + '\n' + original;
+    const obfuscated = obfuscateLua(combined);
 
     if (file.obfuscated) {
       // Already obfuscated — create a NEW version row with the same name,
