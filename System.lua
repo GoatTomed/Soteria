@@ -1,18 +1,32 @@
 -- ============================================================
---  YouSuck — Key System
+--  YouSuck — Key System (extracted)
 -- ============================================================
 
-local Players       = game:GetService("Players")
-local HttpService   = game:GetService("HttpService")
-local TweenService  = game:GetService("TweenService")
+local Players      = game:GetService("Players")
+local HttpService  = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
 
 while not Players.LocalPlayer do task.wait(0.1) end
 local LocalPlayer = Players.LocalPlayer
 
 -- ── Constants ─────────────────────────────────────────────
-local KEY_FILE       = "yousuck_key.txt"
-local VALIDATE_URL   = "https://yoursuck.vercel.app/api/verify-key"
-local GET_KEY_URL    = "https://yoursuck.vercel.app/"
+local KEY_FILE     = "yousuck_key.txt"
+local VALIDATE_URL = "https://yoursuck.vercel.app/api/verify-key"
+local GET_KEY_URL  = "https://yoursuck.vercel.app/"
+
+-- ── Theme (matches original UI.Theme) ────────────────────
+local Theme = {
+    BG      = Color3.fromRGB(18, 18, 18),
+    Surface = Color3.fromRGB(24, 24, 24),
+    Raised  = Color3.fromRGB(30, 30, 30),
+    Sidebar = Color3.fromRGB(14, 14, 14),
+    Border  = Color3.fromRGB(40, 40, 40),
+    Accent  = Color3.fromRGB(247, 197, 46),
+    Text    = Color3.fromRGB(240, 240, 240),
+    TextMid = Color3.fromRGB(150, 150, 150),
+    Success = Color3.fromRGB(34, 197, 94),
+    Error   = Color3.fromRGB(239, 68, 68),
+}
 
 -- ── File helpers ──────────────────────────────────────────
 local function canRead()  return type(readfile)  == "function" or type(read_file)  == "function" end
@@ -43,6 +57,10 @@ local function getSavedKey()
         if ok and type(content) == "string" then
             return content:gsub("^%s*(.-)%s*$", "%1")
         end
+    end
+    local ok, content = readFile(KEY_FILE)
+    if ok and type(content) == "string" then
+        return content:gsub("^%s*(.-)%s*$", "%1")
     end
     return nil
 end
@@ -95,26 +113,7 @@ local function normalizeKey(str)
     return s
 end
 
--- ── GUI ───────────────────────────────────────────────────
-local Theme = {
-    BG      = Color3.fromRGB(24, 24, 28),
-    Card    = Color3.fromRGB(30, 30, 35),
-    Input   = Color3.fromRGB(42, 42, 50),
-    Border  = Color3.fromRGB(55, 55, 65),
-    Text    = Color3.fromRGB(235, 235, 235),
-    TextMid = Color3.fromRGB(120, 120, 135),
-    Cyan    = Color3.fromRGB(0,  185, 235),
-    CyanHov = Color3.fromRGB(20, 205, 255),
-    Btn     = Color3.fromRGB(52, 52, 62),
-    BtnHov  = Color3.fromRGB(68, 68, 80),
-    Red     = Color3.fromRGB(220, 50, 50),
-    RedHov  = Color3.fromRGB(240, 70, 70),
-}
-
-local function tween(obj, goal, t)
-    TweenService:Create(obj, TweenInfo.new(t or 0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), goal):Play()
-end
-
+-- ── GUI helpers ───────────────────────────────────────────
 local function make(class, props)
     local obj = Instance.new(class)
     for k, v in pairs(props or {}) do
@@ -124,12 +123,13 @@ local function make(class, props)
     return obj
 end
 
-local function corner(parent, r)
-    return make("UICorner", { CornerRadius = UDim.new(0, r or 8), Parent = parent })
+local function tween(obj, goal, t)
+    TweenService:Create(obj, TweenInfo.new(t or 0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), goal):Play()
 end
 
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+-- ── ScreenGui ─────────────────────────────────────────────
 local ScreenGui = make("ScreenGui", {
     Name            = "KeySystem",
     ResetOnSpawn    = false,
@@ -138,149 +138,152 @@ local ScreenGui = make("ScreenGui", {
     Parent          = PlayerGui,
 })
 
-make("Frame", {
+-- ── Overlay (dim background) ──────────────────────────────
+local Overlay = make("Frame", {
+    Name                  = "KeyOverlay",
     Size                  = UDim2.new(1, 0, 1, 0),
+    Position              = UDim2.new(0, 0, 0, 0),
     BackgroundColor3      = Color3.fromRGB(0, 0, 0),
-    BackgroundTransparency = 0.52,
-    BorderSizePixel       = 0,
-    ZIndex                = 1,
+    BackgroundTransparency = 0.55,
+    ZIndex                = 999,
     Parent                = ScreenGui,
 })
+make("UICorner", { CornerRadius = UDim.new(0, 12), Parent = Overlay })
 
+-- Blocker: invisible button that absorbs clicks on the overlay
+local Blocker = make("TextButton", {
+    Name               = "Blocker",
+    Size               = UDim2.new(1, 0, 1, 0),
+    BackgroundTransparency = 1,
+    AutoButtonColor    = false,
+    Text               = "",
+    Parent             = Overlay,
+})
+
+-- ── Key Card ──────────────────────────────────────────────
 local Card = make("Frame", {
-    Name             = "Card",
-    Size             = UDim2.new(0, 370, 0, 192),
-    Position         = UDim2.new(0.5, -185, 0.5, -96),
-    BackgroundColor3 = Theme.Card,
-    BorderSizePixel  = 0,
-    ZIndex           = 2,
-    Parent           = ScreenGui,
+    Name             = "KeyCard",
+    Size             = UDim2.new(0, 380, 0, 220),
+    Position         = UDim2.new(0.5, -190, 0.5, -110),
+    BackgroundColor3 = Theme.Surface,
+    Parent           = Overlay,
 })
-corner(Card, 12)
-make("UIStroke", { Color = Theme.Border, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = Card })
+make("UICorner", { CornerRadius = UDim.new(0, 12), Parent = Card })
+make("UIStroke", { Color = Theme.Border, Thickness = 1, Parent = Card })
 
--- Close button
-local CloseBtn = make("TextButton", {
-    Size             = UDim2.new(0, 26, 0, 26),
-    Position         = UDim2.new(1, -13, 0, -13),
-    BackgroundColor3 = Theme.Red,
-    AutoButtonColor  = false,
-    Text             = "✕",
-    TextColor3       = Color3.fromRGB(255, 255, 255),
-    TextSize         = 12,
-    Font             = Enum.Font.GothamBold,
-    ZIndex           = 5,
-    Parent           = Card,
-})
-corner(CloseBtn, 13)
-make("UIStroke", { Color = Color3.fromRGB(170, 35, 35), Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = CloseBtn })
-
--- Title
+-- ── Title ─────────────────────────────────────────────────
 make("TextLabel", {
-    Size               = UDim2.new(1, -48, 0, 28),
+    Name               = "Title",
+    Size               = UDim2.new(1, -40, 0, 24),
     Position           = UDim2.new(0, 20, 0, 16),
     BackgroundTransparency = 1,
     Text               = "Enter access key",
     TextColor3         = Theme.Text,
+    Font               = Enum.Font.Gotham,
     TextSize           = 18,
-    Font               = Enum.Font.GothamBold,
     TextXAlignment     = Enum.TextXAlignment.Left,
-    ZIndex             = 3,
     Parent             = Card,
 })
 
--- Input box
-local InputBox = make("TextBox", {
-    Size               = UDim2.new(1, -40, 0, 38),
-    Position           = UDim2.new(0, 20, 0, 56),
-    BackgroundColor3   = Theme.Input,
+-- ── Key input box ─────────────────────────────────────────
+local KeyBox = make("TextBox", {
+    Name               = "KeyBox",
+    Size               = UDim2.new(1, -40, 0, 36),
+    Position           = UDim2.new(0, 20, 0, 72),
+    BackgroundColor3   = Theme.Raised,
     BorderSizePixel    = 0,
     Text               = "",
     PlaceholderText    = "Your Key Here!",
+    TextColor3         = Color3.fromRGB(255, 255, 255),
     PlaceholderColor3  = Theme.TextMid,
-    TextColor3         = Theme.Text,
-    TextSize           = 14,
     Font               = Enum.Font.Gotham,
+    TextSize           = 14,
     ClearTextOnFocus   = false,
-    ZIndex             = 3,
     Parent             = Card,
 })
-corner(InputBox, 8)
-make("UIStroke", { Color = Theme.Border, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = InputBox })
-make("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), Parent = InputBox })
+make("UICorner", { CornerRadius = UDim.new(0, 10), Parent = KeyBox })
 
--- Status label (feedback only — never shows saved key expired text)
+-- ── Status label ──────────────────────────────────────────
 local StatusLabel = make("TextLabel", {
     Name               = "Status",
-    Size               = UDim2.new(1, -40, 0, 18),
-    Position           = UDim2.new(0, 20, 0, 102),
+    Size               = UDim2.new(1, -40, 0, 20),
+    Position           = UDim2.new(0, 20, 0, 116),
     BackgroundTransparency = 1,
-    Text               = "",
+    Text               = "Enter your key to use this script.",
     TextColor3         = Theme.TextMid,
-    TextSize           = 12,
     Font               = Enum.Font.Gotham,
+    TextSize           = 13,
     TextXAlignment     = Enum.TextXAlignment.Left,
-    ZIndex             = 3,
     Parent             = Card,
 })
 
--- Get Key button
-local GetKeyBtn = make("TextButton", {
-    Size             = UDim2.new(0, 118, 0, 38),
-    Position         = UDim2.new(0, 20, 1, -58),
-    BackgroundColor3 = Theme.Btn,
+-- ── Get Key button ────────────────────────────────────────
+local FetchBtn = make("TextButton", {
+    Name             = "FetchBtn",
+    Size             = UDim2.new(0, 120, 0, 34),
+    Position         = UDim2.new(0.5, -130, 1, -50),
+    BackgroundColor3 = Theme.Raised,
     AutoButtonColor  = false,
     Text             = "Get Key",
     TextColor3       = Theme.Text,
+    Font             = Enum.Font.Gotham,
     TextSize         = 14,
-    Font             = Enum.Font.GothamSemibold,
-    ZIndex           = 3,
     Parent           = Card,
 })
-corner(GetKeyBtn, 20)
+make("UICorner", { CornerRadius = UDim.new(0, 10), Parent = FetchBtn })
 
--- Verify button
-local VerifyBtn = make("TextButton", {
-    Size             = UDim2.new(0, 118, 0, 38),
-    Position         = UDim2.new(1, -138, 1, -58),
-    BackgroundColor3 = Theme.Cyan,
+-- ── Verify button ─────────────────────────────────────────
+local ValidateBtn = make("TextButton", {
+    Name             = "Validate",
+    Size             = UDim2.new(0, 120, 0, 34),
+    Position         = UDim2.new(0.5, 10, 1, -50),
+    BackgroundColor3 = Theme.Accent,
     AutoButtonColor  = false,
     Text             = "Verify",
-    TextColor3       = Color3.fromRGB(255, 255, 255),
+    TextColor3       = Color3.fromRGB(15, 15, 15),
+    Font             = Enum.Font.Gotham,
     TextSize         = 14,
-    Font             = Enum.Font.GothamBold,
-    ZIndex           = 3,
     Parent           = Card,
 })
-corner(VerifyBtn, 20)
+make("UICorner", { CornerRadius = UDim.new(0, 10), Parent = ValidateBtn })
 
--- ── Hover effects ─────────────────────────────────────────
-CloseBtn.MouseEnter:Connect(function()  tween(CloseBtn,  { BackgroundColor3 = Theme.RedHov  }) end)
-CloseBtn.MouseLeave:Connect(function()  tween(CloseBtn,  { BackgroundColor3 = Theme.Red     }) end)
-GetKeyBtn.MouseEnter:Connect(function() tween(GetKeyBtn, { BackgroundColor3 = Theme.BtnHov  }) end)
-GetKeyBtn.MouseLeave:Connect(function() tween(GetKeyBtn, { BackgroundColor3 = Theme.Btn     }) end)
-VerifyBtn.MouseEnter:Connect(function() tween(VerifyBtn, { BackgroundColor3 = Theme.CyanHov }) end)
-VerifyBtn.MouseLeave:Connect(function() tween(VerifyBtn, { BackgroundColor3 = Theme.Cyan    }) end)
+-- ── Close button ──────────────────────────────────────────
+local CloseBtn = make("TextButton", {
+    Name             = "CloseBtn",
+    Size             = UDim2.new(0, 22, 0, 22),
+    Position         = UDim2.new(1, -30, 0, 8),
+    BackgroundColor3 = Color3.fromRGB(239, 68, 68),
+    AutoButtonColor  = false,
+    Text             = "X",
+    TextColor3       = Color3.fromRGB(255, 255, 255),
+    Font             = Enum.Font.GothamBold,
+    TextSize         = 11,
+    TextXAlignment   = Enum.TextXAlignment.Center,
+    TextYAlignment   = Enum.TextYAlignment.Center,
+    Parent           = Card,
+})
+make("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = CloseBtn })
+make("UIStroke", { Color = Color3.fromRGB(180, 40, 40), Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = CloseBtn })
 
--- ── Input focus glow ──────────────────────────────────────
-local InputStroke = InputBox:FindFirstChildOfClass("UIStroke")
-InputBox.Focused:Connect(function()
-    if InputStroke then tween(InputStroke, { Color = Theme.Cyan }, 0.18) end
+-- ── Close button hover ────────────────────────────────────
+CloseBtn.MouseEnter:Connect(function()
+    TweenService:Create(CloseBtn, TweenInfo.new(0.12), { BackgroundColor3 = Color3.fromRGB(220, 50, 50) }):Play()
 end)
-InputBox.FocusLost:Connect(function()
-    if InputStroke then tween(InputStroke, { Color = Theme.Border }, 0.18) end
+CloseBtn.MouseLeave:Connect(function()
+    TweenService:Create(CloseBtn, TweenInfo.new(0.12), { BackgroundColor3 = Color3.fromRGB(239, 68, 68) }):Play()
 end)
 
 -- ── Helpers ───────────────────────────────────────────────
-local function setStatus(text, color)
-    StatusLabel.Text      = tostring(text or "")
-    StatusLabel.TextColor3 = color or Theme.TextMid
+local function setStatus(text)
+    if StatusLabel and StatusLabel:IsA("TextLabel") then
+        StatusLabel.Text = tostring(text or "")
+    end
 end
 
-local function closeGui()
-    tween(Card, { Position = UDim2.new(0.5, -185, 0.6, -96), BackgroundTransparency = 0.4 }, 0.2)
-    task.wait(0.2)
-    ScreenGui:Destroy()
+local function showKeyOverlay(visible)
+    if Overlay then
+        Overlay.Visible = visible and true or false
+    end
 end
 
 -- ── Validation ────────────────────────────────────────────
@@ -294,25 +297,25 @@ local function validateKey(key, onResult)
 
     local norm = normalizeKey(key)
     if not norm:match("^[A-Z0-9][A-Z0-9][A-Z0-9]%-[A-Z0-9][A-Z0-9][A-Z0-9]%-[A-Z0-9][A-Z0-9][A-Z0-9]$") then
-        onResult(false, "Invalid key format.")
+        onResult(false, "Invalid key format. Expected 3 alphanumeric chars, dash, 3 chars, dash, 3 chars.")
         return
     end
 
     if not hasHttp() then
-        onResult(false, "HTTP not available in this executor.")
+        onResult(false, "HTTP not available. Executor cannot reach validation server.")
         return
     end
 
-    setStatus("Validating…", Theme.TextMid)
+    setStatus("Validating...")
     local ok, body = safePost(VALIDATE_URL, { key = norm })
     if not ok or type(body) ~= "string" then
-        onResult(false, "Could not reach validation server.")
+        onResult(false, "Validation server unreachable or request failed.")
         return
     end
 
     local decOk, data = pcall(function() return HttpService:JSONDecode(body) end)
     if not decOk or type(data) ~= "table" then
-        onResult(false, "Bad server response.")
+        onResult(false, "Bad validation response from server.")
         return
     end
 
@@ -322,59 +325,61 @@ local function validateKey(key, onResult)
 end
 
 -- ── Button logic ──────────────────────────────────────────
-CloseBtn.MouseButton1Click:Connect(function() closeGui() end)
-
-GetKeyBtn.MouseButton1Click:Connect(function()
-    pcall(function()
-        if setclipboard then setclipboard(GET_KEY_URL) end
-    end)
-    setStatus("Key URL copied to clipboard.", Theme.TextMid)
+CloseBtn.MouseButton1Click:Connect(function()
+    task.wait(0.1)
+    ScreenGui:Destroy()
 end)
 
-VerifyBtn.MouseButton1Click:Connect(function()
+Blocker.MouseButton1Click:Connect(function()
+    -- no-op
+end)
+
+FetchBtn.MouseButton1Click:Connect(function()
+    if setclipboard then pcall(setclipboard, GET_KEY_URL) end
+    setStatus("Key URL copied to clipboard.")
+end)
+
+ValidateBtn.MouseButton1Click:Connect(function()
     if validated then return end
-    local key = InputBox.Text:gsub("^%s*(.-)%s*$", "%1")
-    if key == "" then setStatus("Enter a key first.", Theme.TextMid) return end
+    local key = tostring(KeyBox.Text or ""):gsub("^%s*(.-)%s*$", "%1")
+    if key == "" then setStatus("Enter a key to continue."); return end
 
-    VerifyBtn.Text = "Checking…"
-    VerifyBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 175)
-
+    setStatus("Validating...")
     task.spawn(function()
         validateKey(key, function(success, message)
             if success then
                 validated = true
-                setStatus(message, Color3.fromRGB(34, 197, 94))
-                saveKey(normalizeKey(key))
-                VerifyBtn.Text       = "Verified ✓"
-                VerifyBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
-                task.wait(1.2)
-                closeGui()
+                setStatus(message or "Access granted.")
+                local enteredKey = tostring(KeyBox.Text or ""):gsub("^%s*(.-)%s*$", "%1")
+                if enteredKey ~= "" and enteredKey ~= "test" then
+                    saveKey(normalizeKey(enteredKey))
+                end
+                showKeyOverlay(false)
             else
-                setStatus(message, Color3.fromRGB(239, 68, 68))
-                VerifyBtn.Text       = "Verify"
-                VerifyBtn.BackgroundColor3 = Theme.Cyan
+                setStatus(message or "Invalid key.")
             end
         end)
     end)
 end)
 
 -- ── Auto-validate saved key (silently, no expired message) ─
-task.spawn(function()
-    task.wait(0.3)
-    local saved = getSavedKey()
-    if not saved or saved == "" then return end
-
-    InputBox.Text = saved
-    validateKey(saved, function(success, message)
-        if success then
-            validated = true
-            setStatus(message, Color3.fromRGB(34, 197, 94))
-            saveKey(normalizeKey(saved))
-            VerifyBtn.Text             = "Verified ✓"
-            VerifyBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
-            task.wait(1.2)
-            closeGui()
-        end
-        -- on failure: do nothing, leave overlay open so user can re-enter
+local savedKey = getSavedKey()
+if savedKey and savedKey ~= "" then
+    KeyBox.Text = savedKey
+    Overlay.Visible = false
+    task.spawn(function()
+        task.wait(0.2)
+        validateKey(savedKey, function(success, message)
+            if success then
+                validated = true
+                showKeyOverlay(false)
+                saveKey(normalizeKey(savedKey))
+            else
+                showKeyOverlay(true)
+                setStatus("Enter your key to use this script.")
+            end
+        end)
     end)
-end)
+else
+    Overlay.Visible = true
+end
