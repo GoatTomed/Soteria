@@ -44,15 +44,14 @@ export type Key = {
 export type Integration = {
   id: string;
   provider: string;
-  api_key: string;
+  link_url: string;
   status: string;
   created_at: string;
   display_name: string;
-  publisher_id: string;
-  anti_bypass_token: string;
   key_expiry_days: number;
-  daily_key_limit: number;
-  checkpoints: { name: string; url: string }[];
+  checkpoints_config: string;
+  hwid_lock: boolean;
+  uid_lock: boolean;
   service_id: string | null;
 };
 

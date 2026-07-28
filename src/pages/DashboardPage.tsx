@@ -1030,20 +1030,74 @@ function OracleKeysAnalytics({ keys, services }: { keys: Key[]; services: Servic
   );
 }
 
-type ProviderField = 'api_key' | 'publisher_id' | 'anti_bypass_token';
 type Provider = {
   name: 'Linkvertise' | 'Work.ink' | 'LootLabs' | 'Earnpaste';
   desc: string;
   logo: string;
   docs: string;
-  fields: ProviderField[];
+  linkLabel: string;
+  linkPlaceholder: string;
+  linkType: 'url' | 'id';
+  setupSteps: string[];
 };
 
 const MONETIZATION_PROVIDERS: Provider[] = [
-  { name: 'Linkvertise', desc: 'Monetize your scripts with link shorteners', logo: 'https://soteria.rip/logos/linkvertise.svg', docs: 'https://linkvertise.com/', fields: ['publisher_id', 'anti_bypass_token'] },
-  { name: 'Work.ink', desc: 'Earn revenue from your script downloads', logo: 'https://soteria.rip/logos/workink.png', docs: 'https://work.ink/', fields: ['api_key', 'anti_bypass_token'] },
-  { name: 'LootLabs', desc: 'Gateway monetization for your services', logo: 'https://soteria.rip/logos/lootlabs.svg', docs: 'https://lootlabs.gg/', fields: ['api_key', 'anti_bypass_token'] },
-  { name: 'Earnpaste', desc: 'Monetize your gate links with paste-based ads', logo: 'https://yt3.ggpht.com/OV2tg0DmV-NvTvzSr6bxSXMXRG8TMBTOJOzgBfHTzV2x0KPSLDP5yufzsmKEmzfovbSDd3A1=s240-c-k-c0x00ffffff-no-rj', docs: 'https://earnpaste.com/', fields: ['api_key'] },
+  {
+    name: 'Linkvertise',
+    desc: 'Monetize your scripts with link shorteners',
+    logo: 'https://soteria.rip/logos/linkvertise.svg',
+    docs: 'https://linkvertise.com/',
+    linkLabel: 'Publisher ID',
+    linkPlaceholder: 'e.g. 123456',
+    linkType: 'id',
+    setupSteps: [
+      'Log in to linkvertise.com and go to your dashboard.',
+      'Copy your Publisher ID from Settings → Account.',
+      'Paste it in the field above and save.',
+    ],
+  },
+  {
+    name: 'Work.ink',
+    desc: 'Earn revenue from your script downloads',
+    logo: 'https://soteria.rip/logos/workink.png',
+    docs: 'https://work.ink/',
+    linkLabel: 'Workink URL',
+    linkPlaceholder: 'https://work.ink/123/example',
+    linkType: 'url',
+    setupSteps: [
+      'Log in to work.ink and create a new link.',
+      'Copy the full link URL (e.g. https://work.ink/123/example).',
+      'Paste it in the field above and save.',
+    ],
+  },
+  {
+    name: 'LootLabs',
+    desc: 'Gateway monetization for your services',
+    logo: 'https://soteria.rip/logos/lootlabs.svg',
+    docs: 'https://lootlabs.gg/',
+    linkLabel: 'LootLabs Link',
+    linkPlaceholder: 'https://lootlabs.gg/l/example',
+    linkType: 'url',
+    setupSteps: [
+      'Log in to lootlabs.gg and go to your links panel.',
+      'Create a new link and copy its URL.',
+      'Paste it in the field above and save.',
+    ],
+  },
+  {
+    name: 'Earnpaste',
+    desc: 'Monetize your gate links with paste-based ads',
+    logo: 'https://yt3.ggpht.com/OV2tg0DmV-NvTvzSr6bxSXMXRG8TMBTOJOzgBfHTzV2x0KPSLDP5yufzsmKEmzfovbSDd3A1=s240-c-k-c0x00ffffff-no-rj',
+    docs: 'https://earnpaste.com/',
+    linkLabel: 'Earnpaste URL',
+    linkPlaceholder: 'https://earnpaste.com/example',
+    linkType: 'url',
+    setupSteps: [
+      'Log in to earnpaste.com and create a new paste link.',
+      'Copy the full URL of your paste.',
+      'Paste it in the field above and save.',
+    ],
+  },
 ];
 
 type ProviderName = (typeof MONETIZATION_PROVIDERS)[number]['name'];
@@ -1148,20 +1202,16 @@ function OracleMonetization() {
 }
 
 function NewIntegrationModal({ onClose }: { onClose: () => void }) {
-  const [step, setStep] = useState<'select' | 'configure'>('select');
   const [provider, setProvider] = useState<ProviderName | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [serviceId, setServiceId] = useState('');
-  const [form, setForm] = useState({
-    display_name: '',
-    api_key: '',
-    publisher_id: '',
-    anti_bypass_token: '',
-    key_expiry_days: 0,
-    daily_key_limit: 0,
-  });
-  const [checkpoints, setCheckpoints] = useState<{ name: string; url: string }[]>([]);
-  const [cpName, setCpName] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [linkValue, setLinkValue] = useState('');
+  const [keyExpiry, setKeyExpiry] = useState('Never');
+  const [checkpoints, setCheckpoints] = useState('None');
+  const [hwidLock, setHwidLock] = useState('Disabled');
+  const [uidLock, setUidLock] = useState('Disabled');
+  const [showSetup, setShowSetup] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -1174,37 +1224,21 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
     })();
   }, []);
 
-  const addCheckpoint = () => {
-    if (!cpName.trim()) return;
-    const url = generateVerificationUrl();
-    setCheckpoints(prev => [...prev, { name: cpName.trim(), url }]);
-    setCpName('');
-  };
-
-  const removeCheckpoint = (idx: number) => {
-    setCheckpoints(prev => prev.filter((_, i) => i !== idx));
-  };
-
   const save = async () => {
     if (!provider) return;
     setError('');
     if (!serviceId) { setError('You must select a service to connect this integration to'); return; }
-    const needsKey = selected?.fields.includes('api_key');
-    const needsPub = selected?.fields.includes('publisher_id');
-    if (needsKey && !form.api_key.trim()) { setError('API key is required'); return; }
-    if (needsPub && !form.publisher_id.trim()) { setError('Publisher ID is required'); return; }
-    if (selected?.fields.includes('anti_bypass_token') && !form.anti_bypass_token.trim()) { setError('Anti-bypass token is required'); return; }
+    if (!linkValue.trim()) { setError(`${selected?.linkLabel ?? 'Link'} is required`); return; }
 
     setSaving(true);
     const { error: insErr } = await supabase.from('integrations').insert({
       provider,
-      api_key: form.api_key,
-      publisher_id: form.publisher_id,
-      anti_bypass_token: form.anti_bypass_token,
-      display_name: form.display_name || provider,
-      key_expiry_days: form.key_expiry_days,
-      daily_key_limit: form.daily_key_limit,
-      checkpoints,
+      link_url: linkValue.trim(),
+      display_name: displayName || provider,
+      key_expiry_days: keyExpiry === 'Never' ? 0 : parseInt(keyExpiry) || 0,
+      checkpoints_config: checkpoints,
+      hwid_lock: hwidLock !== 'Disabled',
+      uid_lock: uidLock !== 'Disabled',
       service_id: serviceId,
       status: 'connected',
     });
@@ -1220,204 +1254,198 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4 sticky top-0 bg-[hsl(0,0%,7%)] z-10">
-          <div className="flex items-center gap-3">
-            {step === 'configure' && provider ? (
-              <button onClick={() => setStep('select')} className="p-1.5 -ml-1.5 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors">
-                <ChevronDown className="h-4 w-4 rotate-90" />
-              </button>
-            ) : null}
-            <div>
-              <h3 className="text-sm font-semibold text-white">
-                {step === 'select' ? 'New Integration' : `Configure ${provider}`}
-              </h3>
-              <p className="text-xs text-white/40">
-                {step === 'select' ? 'Choose a monetization provider' : 'Enter your credentials and settings'}
-              </p>
-            </div>
+          <div>
+            <h3 className="text-sm font-semibold text-white">New Integration</h3>
+            <p className="text-xs text-white/40">Connect a monetization provider</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {step === 'select' && (
-          <div className="p-5 space-y-3">
-            {MONETIZATION_PROVIDERS.map(p => (
-              <button
-                key={p.name}
-                onClick={() => { setProvider(p.name); setStep('configure'); }}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border border-white/[0.07] bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04] transition-colors text-left group"
-              >
-                <div className="h-11 w-11 rounded-xl bg-white/[0.06] flex items-center justify-center overflow-hidden shrink-0">
-                  <img src={p.logo} alt={p.name} className="h-8 w-8 object-contain" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white">{p.name}</p>
-                  <p className="text-xs text-white/40 truncate">{p.desc}</p>
-                </div>
-                <ChevronDown className="h-4 w-4 text-white/30 -rotate-90 group-hover:text-white/60 transition-colors shrink-0" />
-              </button>
-            ))}
+        <div className="p-5 space-y-5">
+          {/* Provider selection */}
+          <div>
+            <label className="block text-xs font-medium text-white/40 mb-2">Provider</label>
+            <div className="space-y-2">
+              {MONETIZATION_PROVIDERS.map(p => (
+                <button
+                  key={p.name}
+                  onClick={() => setProvider(p.name)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-colors text-left ${
+                    provider === p.name
+                      ? 'border-white/25 bg-white/[0.06]'
+                      : 'border-white/[0.07] bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <div className="h-9 w-9 rounded-lg bg-white/[0.06] flex items-center justify-center overflow-hidden shrink-0">
+                    <img src={p.logo} alt={p.name} className="h-6 w-6 object-contain" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white">{p.name}</p>
+                    <p className="text-xs text-white/40 truncate">{p.desc}</p>
+                  </div>
+                  <div className={`h-4 w-4 rounded-full border-2 shrink-0 ${provider === p.name ? 'border-white bg-white' : 'border-white/20'}`} />
+                </button>
+              ))}
+            </div>
           </div>
-        )}
 
-        {step === 'configure' && selected && (
-          <div className="p-5 space-y-5">
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <div className="h-10 w-10 rounded-lg bg-white/[0.06] flex items-center justify-center overflow-hidden">
-                <img src={selected.logo} alt={selected.name} className="h-7 w-7 object-contain" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-white">{selected.name}</p>
-                <p className="text-xs text-white/40">{selected.desc}</p>
-              </div>
-              <a href={selected.docs} target="_blank" rel="noreferrer" className="text-xs text-white/40 hover:text-white flex items-center gap-1">
-                Docs <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-white/40 mb-1.5">Service <span className="text-red-400">*</span></label>
-              <select
-                value={serviceId}
-                onChange={e => setServiceId(e.target.value)}
-                style={{ colorScheme: 'dark' }}
-                className="w-full h-9 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none focus:border-white/20"
-              >
-                <option value="">Select a service…</option>
-                {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-              <p className="text-xs text-white/30 mt-1">This integration must be linked to one of your Oracle services.</p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-white/40 mb-1.5">Display name</label>
-              <input
-                value={form.display_name}
-                onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))}
-                placeholder={selected.name}
-                className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
-              />
-            </div>
-
-            {selected.fields.includes('publisher_id') && (
+          {selected && (
+            <>
+              {/* Service */}
               <div>
-                <label className="block text-xs font-medium text-white/40 mb-1.5">Publisher ID</label>
+                <label className="block text-xs font-medium text-white/40 mb-1.5">Service <span className="text-red-400">*</span></label>
+                <select
+                  value={serviceId}
+                  onChange={e => setServiceId(e.target.value)}
+                  style={{ colorScheme: 'dark' }}
+                  className="w-full h-9 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none focus:border-white/20"
+                >
+                  <option value="">Select a service…</option>
+                  {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              {/* Display name */}
+              <div>
+                <label className="block text-xs font-medium text-white/40 mb-1.5">Display name</label>
                 <input
-                  value={form.publisher_id}
-                  onChange={e => setForm(f => ({ ...f, publisher_id: e.target.value }))}
-                  placeholder="Your Linkvertise publisher ID"
+                  value={displayName}
+                  onChange={e => setDisplayName(e.target.value)}
+                  placeholder={selected.name}
                   className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
                 />
-                <p className="text-xs text-white/30 mt-1">Found in your Linkvertise dashboard under Settings.</p>
               </div>
-            )}
 
-            {selected.fields.includes('api_key') && (
+              {/* Link / ID */}
               <div>
-                <label className="block text-xs font-medium text-white/40 mb-1.5">API Key</label>
+                <label className="block text-xs font-medium text-white/40 mb-1.5">{selected.linkLabel} <span className="text-red-400">*</span></label>
                 <input
-                  value={form.api_key}
-                  onChange={e => setForm(f => ({ ...f, api_key: e.target.value }))}
-                  placeholder="Your API key"
-                  className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20 font-mono"
-                />
-                <p className="text-xs text-white/30 mt-1">Generate one from your {selected.name} dashboard under API settings.</p>
-              </div>
-            )}
-
-            {selected.fields.includes('anti_bypass_token') && (
-              <div>
-                <label className="block text-xs font-medium text-white/40 mb-1.5">Anti-Bypass Token</label>
-                <input
-                  value={form.anti_bypass_token}
-                  onChange={e => setForm(f => ({ ...f, anti_bypass_token: e.target.value }))}
-                  placeholder="Anti-bypass token"
-                  className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20 font-mono"
-                />
-                <p className="text-xs text-white/30 mt-1">A secret token embedded in your script. {selected.name} verifies it server-side so users can't skip the gateway.</p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-white/40 mb-1.5">Key expiry (days)</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.key_expiry_days}
-                  onChange={e => setForm(f => ({ ...f, key_expiry_days: parseInt(e.target.value) || 0 }))}
+                  value={linkValue}
+                  onChange={e => setLinkValue(e.target.value)}
+                  placeholder={selected.linkPlaceholder}
                   className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
                 />
-                <p className="text-xs text-white/30 mt-1">0 = never expires</p>
+                <p className="text-xs text-white/30 mt-1">
+                  {selected.linkType === 'url' ? 'Paste your full link URL here.' : 'Enter your publisher ID from the dashboard.'}
+                </p>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-white/40 mb-1.5">Daily key limit</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.daily_key_limit}
-                  onChange={e => setForm(f => ({ ...f, daily_key_limit: parseInt(e.target.value) || 0 }))}
-                  className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
-                />
-                <p className="text-xs text-white/30 mt-1">0 = unlimited</p>
-              </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-medium text-white/40 mb-1.5">Checkpoints</label>
-              <p className="text-xs text-white/30 mb-2">Add verification steps that users must complete before their key is activated. A unique verification URL is auto-generated for each checkpoint.</p>
-              {checkpoints.length > 0 && (
-                <div className="space-y-2 mb-2">
-                  {checkpoints.map((cp, idx) => (
-                    <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] border border-white/[0.05]">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white truncate">{cp.name}</p>
-                        <p className="text-xs text-brand-300/60 truncate font-mono">{cp.url}</p>
+              {/* Checkpoints dropdown */}
+              <div>
+                <label className="block text-xs font-medium text-white/40 mb-1.5">Checkpoints</label>
+                <select
+                  value={checkpoints}
+                  onChange={e => setCheckpoints(e.target.value)}
+                  style={{ colorScheme: 'dark' }}
+                  className="w-full h-9 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none focus:border-white/20"
+                >
+                  <option value="None">None</option>
+                  <option value="1">1 checkpoint</option>
+                  <option value="2">2 checkpoints</option>
+                  <option value="3">3 checkpoints</option>
+                  <option value="5">5 checkpoints</option>
+                </select>
+                <p className="text-xs text-white/30 mt-1">How many gateway steps users must complete before their key activates.</p>
+              </div>
+
+              {/* Key expiry dropdown */}
+              <div>
+                <label className="block text-xs font-medium text-white/40 mb-1.5">Key expiry</label>
+                <select
+                  value={keyExpiry}
+                  onChange={e => setKeyExpiry(e.target.value)}
+                  style={{ colorScheme: 'dark' }}
+                  className="w-full h-9 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none focus:border-white/20"
+                >
+                  <option value="Never">Never</option>
+                  <option value="1">1 day</option>
+                  <option value="3">3 days</option>
+                  <option value="7">7 days</option>
+                  <option value="14">14 days</option>
+                  <option value="30">30 days</option>
+                  <option value="90">90 days</option>
+                </select>
+              </div>
+
+              {/* HWID & UID lock dropdowns */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-white/40 mb-1.5">HWID lock</label>
+                  <select
+                    value={hwidLock}
+                    onChange={e => setHwidLock(e.target.value)}
+                    style={{ colorScheme: 'dark' }}
+                    className="w-full h-9 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none focus:border-white/20"
+                  >
+                    <option value="Disabled">Disabled</option>
+                    <option value="Enabled">Enabled</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-white/40 mb-1.5">UID lock</label>
+                  <select
+                    value={uidLock}
+                    onChange={e => setUidLock(e.target.value)}
+                    style={{ colorScheme: 'dark' }}
+                    className="w-full h-9 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none focus:border-white/20"
+                  >
+                    <option value="Disabled">Disabled</option>
+                    <option value="Enabled">Enabled</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Collapsible setup guide */}
+              <div className="rounded-xl border border-white/[0.07] overflow-hidden">
+                <button
+                  onClick={() => setShowSetup(s => !s)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+                >
+                  <span className="text-xs font-medium text-white/60 flex items-center gap-2">
+                    <BookOpen className="h-3.5 w-3.5" /> Setup guide
+                  </span>
+                  <ChevronDown className={`h-4 w-4 text-white/40 transition-transform ${showSetup ? '' : '-rotate-90'}`} />
+                </button>
+                {showSetup && (
+                  <div className="px-4 py-3 space-y-2">
+                    {selected.setupSteps.map((step, i) => (
+                      <div key={i} className="flex gap-3">
+                        <span className="text-xs font-semibold text-white/30 shrink-0">{i + 1}.</span>
+                        <p className="text-xs text-white/50">{step}</p>
                       </div>
-                      <button onClick={() => removeCheckpoint(idx)} className="p-1 rounded hover:bg-red-500/10 text-white/40 hover:text-red-400 transition-colors">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
+                    ))}
+                    <a href={selected.docs} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-300 hover:text-brand-200 mt-2">
+                      Open {selected.name} docs <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                  <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                  <p className="text-sm text-red-400">{error}</p>
                 </div>
               )}
-              <div className="flex gap-2">
-                <input
-                  value={cpName}
-                  onChange={e => setCpName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCheckpoint(); } }}
-                  placeholder="Checkpoint name (URL auto-generated)"
-                  className="flex-1 h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
-                />
-                <button onClick={addCheckpoint} className="h-9 px-3 rounded-md border border-white/10 text-sm text-white/60 hover:text-white hover:border-white/20 transition-colors">
-                  <Plus className="h-4 w-4" />
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={save}
+                  disabled={saving}
+                  className="h-9 px-4 rounded-full bg-white text-black text-sm font-medium hover:bg-white/90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  {saving ? 'Saving...' : 'Add Integration'}
+                </button>
+                <button onClick={onClose} className="h-9 px-4 rounded-full border border-white/10 text-sm text-white/60 hover:text-white">
+                  Cancel
                 </button>
               </div>
-            </div>
-
-            {error && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                <XCircle className="h-4 w-4 text-red-400 shrink-0" />
-                <p className="text-sm text-red-400">{error}</p>
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={save}
-                disabled={saving}
-                className="h-9 px-4 rounded-full bg-white text-black text-sm font-medium hover:bg-white/90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                {saving ? 'Saving...' : 'Add Integration'}
-              </button>
-              <button onClick={onClose} className="h-9 px-4 rounded-full border border-white/10 text-sm text-white/60 hover:text-white">
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
