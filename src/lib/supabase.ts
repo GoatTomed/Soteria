@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl =
   import.meta.env.VITE_SUPABASE_URL ||
-  'https://qqnnaknwszrigxwrlvxd.supabase.co';
+  'https://rcxgbxxfmslxhbeftcwt.supabase.co';
 const supabaseAnonKey =
   import.meta.env.VITE_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxbm5ha253c3pyaWd4d3JsdnhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxODc5NDYsImV4cCI6MjEwMDc2Mzk0Nn0.o_z5KcHsc0aSNpRzg7q2qSRN4U6tCs8TbrDRZnmi85o';

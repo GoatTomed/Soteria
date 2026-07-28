@@ -125,7 +125,7 @@ export function obfuscateLua(source: string): string {
   const chunkLines = chunks.map((c, idx) => `  ${vChunk}[${idx + 1}] = "${c}"`);
 
   return [
-    `-- Obfuscated by Soteria`,
+`-- Obfuscated by Yousoteria.vercel.app`,
     `-- ${new Date().toISOString()}`,
     ...junk,
     `local ${vAlpha} = "${shuffled}"`,
@@ -193,7 +193,7 @@ function toBase64Custom(str: string, alphabet: string): string {
 export function unobfuscateLua(obfuscated: string): string {
   if (!obfuscated || !obfuscated.trim()) return '';
 
-  if (!obfuscated.includes('Obfuscated by Soteria')) return obfuscated;
+  if (!obfuscated.includes('Obfuscated by Yousoteria') && !obfuscated.includes('Obfuscated by Soteria')) return obfuscated;
 
   // Try the new shuffled-alphabet format first
   const alphaMatch = obfuscated.match(/local\s+(_[0-9a-f]+)\s*=\s*"([A-Za-z0-9+/]{64})"/);
@@ -496,7 +496,7 @@ function decodeWeAreDevs(src: string): string {
 export function unobfuscateExternal(source: string): string {
   if (!source || !source.trim()) return '';
 
-  if (source.includes('Obfuscated by Soteria')) return unobfuscateLua(source);
+  if (source.includes('Obfuscated by Yousoteria') || source.includes('Obfuscated by Soteria')) return unobfuscateLua(source);
 
   // ── Pass 1: WeAreDevs format ─────────────────────────────────────────────
   const isWeAreDevs = source.includes('wearedevs.net/obfuscator') ||

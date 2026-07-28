@@ -3,7 +3,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { DashboardShell, TabButton, PageTitle, Card } from '@/components/DashboardShell';
 import { supabase, type Service, type Script, type Key, type Integration, type File } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { obfuscateLua, generateSlug, unobfuscateExternal } from '@/lib/obfuscate';
+import { generateSlug, unobfuscateExternal } from '@/lib/obfuscate';
 import { generateKeySystemLua } from '@/lib/key-system';
 import {
   Search, ChevronDown, Plus, Link2, FileCode2, Eye, Sparkles,
@@ -162,7 +162,22 @@ function ObfuscateFiles() {
     const original = file.content || '';
     const keySystem = generateKeySystemLua(file.slug);
     const combined = keySystem + '\n' + original;
-    const obfuscated = obfuscateLua(combined);
+
+    let obfuscated: string;
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://rcxgbxxfmslxhbeftcwt.supabase.co';
+      const res = await fetch(`${supabaseUrl}/functions/v1/wearedevs-obfuscate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: combined }),
+      });
+      const data = await res.json();
+      if (!data.success || !data.obfuscated) throw new Error(data.error || 'Obfuscation failed');
+      obfuscated = data.obfuscated;
+    } catch {
+      setObfuscating(null);
+      return;
+    }
 
     if (file.obfuscated) {
       // Already obfuscated — create a NEW version row with the same name,
@@ -768,7 +783,7 @@ function OracleScripts() {
       {showNew && (
         <Card className="p-5 space-y-3">
           <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Script name" className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20" />
-          <select value={newService} onChange={e => setNewService(e.target.value)} className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white outline-none">
+          <select value={newService} onChange={e => setNewService(e.target.value)} style={{ colorScheme: 'dark' }} className="w-full h-9 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none">
             <option value="">No service</option>
             {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
@@ -902,7 +917,7 @@ function OracleKeys() {
       {showNew && (
         <Card className="p-5 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <select value={newService} onChange={e => setNewService(e.target.value)} className="h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white outline-none">
+            <select value={newService} onChange={e => setNewService(e.target.value)} style={{ colorScheme: 'dark' }} className="h-9 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none">
               <option value="">No service</option>
               {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
@@ -1266,7 +1281,8 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
               <select
                 value={serviceId}
                 onChange={e => setServiceId(e.target.value)}
-                className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white outline-none focus:border-white/20"
+                style={{ colorScheme: 'dark' }}
+                className="w-full h-9 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none focus:border-white/20"
               >
                 <option value="">Select a service…</option>
                 {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -1540,7 +1556,7 @@ function GenesisView() {
   }, []);
 
   const detectFormat = (text: string) => {
-    if (text.includes('Obfuscated by Soteria')) setDetectedFormat('Soteria');
+    if (text.includes('Obfuscated by Yousoteria') || text.includes('Obfuscated by Soteria')) setDetectedFormat('Soteria');
     else if (text.includes('wearedevs.net/obfuscator') || /return\s*\(\s*function\s*\(\.\.\.\)\s*local\s+\w+\s*=\s*\{/.test(text)) setDetectedFormat('WeAreDevs');
     else if (/\\[0-9]{1,3}/.test(text) && text.includes('string.char')) setDetectedFormat('String-encoded');
     else if (/\\x[0-9a-fA-F]{2}/.test(text)) setDetectedFormat('Hex-escaped');
