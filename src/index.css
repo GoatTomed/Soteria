@@ -34,6 +34,17 @@
     background: rgba(255,255,255,0.3);
     color: white;
   }
+  select,
+  select option,
+  select optgroup {
+    background-color: hsl(0 0% 10%);
+    color: hsl(0 0% 90%);
+  }
+  select option:checked,
+  select option:hover {
+    background-color: hsl(0 0% 18%);
+    color: white;
+  }
   h1, h2, h3, h4 {
     @apply font-sans tracking-tight;
   }
