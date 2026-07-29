@@ -32,7 +32,7 @@ function InteractiveCard({ path }: { path: string }) {
               <span>trace --route <span className="text-white">{path}</span></span>
             </div>
             <div className="flex items-center gap-2 text-slate-400">
-              <span className="font-mono text-slate-400">></span>
+              <span className="font-mono text-slate-400">&gt;</span>
               <span>Scanning route registry...</span>
             </div>
             <div className="flex items-center gap-2 text-slate-300">
@@ -40,7 +40,7 @@ function InteractiveCard({ path }: { path: string }) {
               <span>No matching handler registered</span>
             </div>
             <div className="flex items-center gap-2 text-slate-400">
-              <span className="font-mono text-slate-400">></span>
+              <span className="font-mono text-slate-400">&gt;</span>
               <span>found 0 routes · status 404</span>
             </div>
           </div>
