@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { AuthShell } from '@/components/AuthShell';
 import { supabase } from '@/lib/supabase';
+import { createUserAdmin } from '@/lib/admin';
 
 export function SignupPage() {
   const [username, setUsername] = useState('');
@@ -37,23 +38,12 @@ export function SignupPage() {
       return;
     }
 
-    const email = `${clean}@soteria.members`;
-    const { data, error: signUpErr } = await supabase.auth.signUp({ email, password });
-
-    if (signUpErr || !data.user) {
-      setLoading(false);
-      setError(signUpErr?.message ?? 'Something went wrong.');
-      return;
-    }
-
-    const { error: profileErr } = await supabase
-      .from('profiles')
-      .insert({ id: data.user.id, username: clean });
-
+    // Use server-side admin endpoint to create user and profile using the service role key
+    const res = await createUserAdmin(clean, password);
     setLoading(false);
-
-    if (profileErr) {
-      setError('Username already taken.');
+    if (!res.ok || !res.body?.success) {
+      const err = res.body?.error ?? res.body ?? 'Something went wrong.';
+      setError(typeof err === 'string' ? err : JSON.stringify(err));
       return;
     }
 
