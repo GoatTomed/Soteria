@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation, useParams } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { DashboardShell, TabButton, PageTitle, Card } from '@/components/DashboardShell';
-import { supabase, type Service, type Script, type Key, type Integration, type File } from '@/lib/supabase';
+import { supabase, type Service, type Script, type Key, type Integration, type File, type GateLink } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { generateSlug, unobfuscateExternal } from '@/lib/obfuscate';
 import { generateKeySystemLua, generateWrappedKeySystemLua } from '@/lib/key-system';
@@ -12,13 +12,14 @@ import {
   Edit3,
 } from 'lucide-react';
 
-const VALID_TABS = ['obfuscate', 'utilities', 'oracle', 'genesis', 'settings'] as const;
+const VALID_TABS = ['obfuscate', 'utilities', 'gate', 'oracle', 'genesis', 'settings'] as const;
 const ORACLE_SUBS = ['services', 'scripts', 'keys', 'monetization', 'log', 'guide'] as const;
 
 function pathToTab(pathname: string): { tab: string; oracleSub: string } {
   const parts = pathname.split('/').filter(Boolean);
   if (parts.length === 0) return { tab: 'obfuscate', oracleSub: 'services' };
   const first = parts[0];
+  if (first === 'gate') return { tab: 'gate', oracleSub: 'services' };
   if (first === 'oracle') {
     const sub = parts[1] && ORACLE_SUBS.includes(parts[1] as typeof ORACLE_SUBS[number]) ? parts[1] : 'services';
     return { tab: 'oracle', oracleSub: sub };
@@ -30,6 +31,7 @@ function pathToTab(pathname: string): { tab: string; oracleSub: string } {
 }
 
 function tabToPath(tab: string, oracleSub?: string): string {
+  if (tab === 'gate') return '/gate';
   if (tab === 'oracle') return oracleSub && oracleSub !== 'services' ? `/oracle/${oracleSub}` : '/oracle';
   if (tab === 'obfuscate') return '/';
   return `/${tab}`;
@@ -38,7 +40,6 @@ function tabToPath(tab: string, oracleSub?: string): string {
 export function DashboardPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const params = useParams();
   const { tab: urlTab, oracleSub } = pathToTab(location.pathname);
   const [tab, setTab] = useState(urlTab);
 
@@ -57,6 +58,7 @@ export function DashboardPage() {
     <DashboardShell breadcrumb={breadcrumbFor(tab)} activeTab={tab} onTabChange={handleTabChange}>
       {tab === 'obfuscate' && <ObfuscateView />}
       {tab === 'utilities' && <UtilitiesView />}
+      {tab === 'gate' && <GateView />}
       {tab === 'oracle' && <OracleView initialSub={oracleSub} onSubChange={(sub) => navigate(tabToPath('oracle', sub))} />}
       {tab === 'genesis' && <GenesisView />}
       {tab === 'settings' && <SettingsView />}
@@ -65,6 +67,7 @@ export function DashboardPage() {
 }
 
 function breadcrumbFor(tab: string): string {
+  if (tab === 'gate') return 'Soteria / Gate';
   if (tab === 'oracle') return 'Soteria / Oracle';
   if (tab === 'genesis') return 'Soteria / Genesis';
   if (tab === 'utilities') return 'Soteria / Utilities';
@@ -567,6 +570,101 @@ function UtilitiesView() {
 }
 
 /* ============ Oracle ============ */
+
+function GateView() {
+  const { user } = useAuth();
+  const [scripts, setScripts] = useState<Script[]>([]);
+  const [selectedScripts, setSelectedScripts] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const owner = user?.email?.split('@')[0].toLowerCase() ?? 'soteria';
+
+  const wrapScriptForGate = useCallback((content: string, scriptId: string) => {
+    if (content.includes('__SOTERIA_ORIGINAL') || content.includes('-- Soteria Key System')) return content;
+    return generateWrappedKeySystemLua(owner, scriptId, content);
+  }, [owner]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [scriptRes, gateRes] = await Promise.all([
+      supabase.from('scripts').select('*').order('updated_at', { ascending: false }),
+      supabase.from('gate_links').select('script_id').eq('owner_username', owner),
+    ]);
+    setScripts((scriptRes.data as Script[]) ?? []);
+    setSelectedScripts(((gateRes.data as GateLink[]) ?? []).map(link => link.script_id));
+    setLoading(false);
+  }, [owner]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggleGateScript = async (script: Script) => {
+    setSaving(true);
+    const isSelected = selectedScripts.includes(script.id);
+    try {
+      if (isSelected) {
+        await supabase.from('gate_links').delete().eq('owner_username', owner).eq('script_id', script.id);
+        setSelectedScripts(prev => prev.filter(id => id !== script.id));
+      } else {
+        const wrapped = wrapScriptForGate(script.content, script.id);
+        if (wrapped !== script.content) {
+          await supabase.from('scripts').update({ content: wrapped }).eq('id', script.id);
+          setScripts(prev => prev.map(s => s.id === script.id ? { ...s, content: wrapped } : s));
+        }
+        await supabase.from('gate_links').insert({ owner_username: owner, script_id: script.id, integration_id: null });
+        setSelectedScripts(prev => [...prev, script.id]);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 mb-2">
+      <PageTitle>Gate</PageTitle>
+      <Card className="p-6">
+        <div className="flex flex-col gap-4">
+          <div>
+            <p className="text-sm text-white/40">Your gate URL is <span className="text-cyan-300">{window.location.origin}/gate/{owner}</span></p>
+            <p className="text-sm text-white/50 mt-2">Select any scripts you want wrapped with the key system and available through this gate.</p>
+          </div>
+          <div className="grid gap-3">
+            {loading ? (
+              Array.from({ length: 4 }).map((_, idx) => (
+                <div key={idx} className="h-20 rounded-2xl bg-white/[0.04] animate-pulse" />
+              ))
+            ) : scripts.length === 0 ? (
+              <p className="text-sm text-white/40">No scripts available yet.</p>
+            ) : (
+              scripts.map(script => {
+                const selected = selectedScripts.includes(script.id);
+                return (
+                  <button
+                    key={script.id}
+                    type="button"
+                    onClick={() => toggleGateScript(script)}
+                    disabled={saving}
+                    className={`w-full rounded-3xl border p-4 text-left transition-colors ${selected ? 'border-cyan-500/40 bg-cyan-500/10' : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]'}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{script.name}</p>
+                        <p className="text-xs text-white/40 mt-1">{script.status} · updated {timeAgo(script.updated_at)}</p>
+                      </div>
+                      <span className={`text-xs font-semibold rounded-full px-3 py-1 ${selected ? 'bg-cyan-500/20 text-cyan-200' : 'bg-white/10 text-white/70'}`}>
+                        {selected ? 'Gated' : 'Gate this script'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
 
 function OracleView({ initialSub, onSubChange }: { initialSub: string; onSubChange: (sub: string) => void }) {
   const [sub, setSub] = useState(initialSub);

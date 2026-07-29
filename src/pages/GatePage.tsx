@@ -3,7 +3,7 @@ import { useParams, Link, useSearchParams } from 'react-router-dom';
 import {
   Loader2, ShieldCheck, ExternalLink, Check, Lock, KeyRound, Copy, AlertCircle, Sparkles,
 } from 'lucide-react';
-import { supabase, type File, type Integration } from '@/lib/supabase';
+import { supabase, type Integration } from '@/lib/supabase';
 import { Logo } from '@/components/Logo';
 
 type GateState = 'loading' | 'ready' | 'not_found' | 'error';
@@ -18,7 +18,6 @@ export function GatePage() {
   const { owner } = useParams<{ owner: string }>();
   const [searchParams] = useSearchParams();
   const [state, setState] = useState<GateState>('loading');
-  const [file, setFile] = useState<File | null>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [visited, setVisited] = useState<Set<string>>(new Set());
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
@@ -32,51 +31,18 @@ export function GatePage() {
     if (!owner) { setState('not_found'); return; }
     setState('loading');
 
-    let fileData: File | null = null;
-
-    const { data: gateData, error } = await supabase
-      .from('gate_links')
-      .select('script_id')
-      .eq('owner_username', owner.toLowerCase())
-      .limit(1);
-
-    if (error || !gateData || gateData.length === 0) {
-      setState('not_found');
-      return;
-    }
-
-    const scriptId = (gateData as { script_id?: string }[])[0]?.script_id;
-    if (!scriptId) {
-      setState('not_found');
-      return;
-    }
-
-    const { data: matchedFile } = await supabase
-      .from('files')
-      .select('*')
-      .eq('id', scriptId)
-      .maybeSingle();
-    fileData = matchedFile as File | null;
-
-    if (!fileData) { setState('not_found'); return; }
-    setFile(fileData);
-
-    const { data: intData } = await supabase
+    const { data: intData, error } = await supabase
       .from('integrations')
       .select('*')
       .eq('status', 'connected')
       .order('created_at', { ascending: true });
+    if (error) {
+      setState('error');
+      return;
+    }
+
     const all = (intData as Integration[]) ?? [];
-
-    // Filter integrations linked to this file via integration_script_links
-    const { data: linkData } = await supabase
-      .from('integration_script_links')
-      .select('integration_id')
-      .eq('script_id', fileData.id);
-    const linkedIds = new Set((linkData ?? []).map(l => l.integration_id));
-    const filtered = all.filter(i => linkedIds.has(i.id));
-
-    setIntegrations(filtered);
+    setIntegrations(all);
     setState('ready');
   }, [owner]);
 
@@ -87,13 +53,13 @@ export function GatePage() {
   // Auto-verify when returning from Earnpaste with ?verify=1
   useEffect(() => {
     if (verifiedRef.current) return;
-    if (state !== 'ready' || !file) return;
+    if (state !== 'ready') return;
     const verify = searchParams.get('verify');
     if (verify === '1' && integrations.length > 0) {
       verifiedRef.current = true;
       setVisited(new Set(integrations.map(i => i.id)));
     }
-  }, [state, file, searchParams, integrations]);
+  }, [state, searchParams, integrations]);
 
   const visitCheckpoint = async (integration: Integration) => {
     const intId = integration.id;
@@ -233,11 +199,11 @@ export function GatePage() {
     <GateFrame>
       <GateCard>
         <div className="space-y-2 text-center mb-6">
-          <h1 className="text-2xl font-medium text-white">{file?.name ?? 'Gateway'}</h1>
+          <h1 className="text-2xl font-medium text-white">{owner ? `${owner}'s Gate` : 'Gateway'}</h1>
           <p className="text-sm text-white/40">
             {integrations.length > 0
               ? `Complete all ${integrations.length} checkpoint${integrations.length !== 1 ? 's' : ''} below to get your key.`
-              : 'Complete the verification to get your key.'}
+              : 'This gate is configured to issue keys directly.'}
           </p>
         </div>
 
@@ -367,9 +333,6 @@ function GateFrame({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      <p className="text-sm text-white/30 relative z-10">
-        Powered by <Link to="/" className="text-white/50 hover:text-white transition-colors">Soteria</Link>
-      </p>
     </div>
   );
 }

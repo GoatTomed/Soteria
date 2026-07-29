@@ -8,7 +8,7 @@ function getSystemUrls(ownerUsername: string | null, scriptId: string) {
   const verifyUrl = `${supabaseUrl}/functions/v1/verify-gate`;
   const siteBase = (import.meta.env.VITE_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173')).replace(/\/$/, '');
   const safeOwner = (ownerUsername || '').trim().toLowerCase();
-  const gateUrl = safeOwner ? `${siteBase}/gate/${encodeURIComponent(safeOwner)}/${scriptId}` : `${siteBase}/gate/${scriptId}`;
+  const gateUrl = safeOwner ? `${siteBase}/gate/${encodeURIComponent(safeOwner)}` : `${siteBase}/gate`;
   return { verifyUrl, gateUrl };
 }
 

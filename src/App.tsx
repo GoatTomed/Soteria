@@ -58,6 +58,7 @@ function AppRoutes() {
       <Route path="/oracle" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/oracle/:subtab" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/genesis" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+      <Route path="/gate" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/unobfuscated" element={<DevAccessRoute><UnobfuscatedPage /></DevAccessRoute>} />

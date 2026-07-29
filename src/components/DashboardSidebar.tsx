@@ -4,6 +4,7 @@ import {
   SlidersHorizontal,
   Eye,
   Sparkles,
+  Lock,
   Settings,
   Menu,
   Bell,
@@ -19,6 +20,7 @@ const overviewItems = [
 ];
 
 const subdivisionItems = [
+  { key: 'gate', label: 'Gate', icon: Lock },
   { key: 'oracle', label: 'Oracle', icon: Eye },
   { key: 'genesis', label: 'Genesis', icon: Sparkles },
 ];
