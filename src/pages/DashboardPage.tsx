@@ -1264,12 +1264,16 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
   const save = async () => {
     if (!provider) return;
     setError('');
-    if (!serviceId) { setError('You must select a service to connect this integration to'); return; }
+    if (!serviceId) { setError('You must select a service to connect this provider to'); return; }
     const isEarnpaste = provider === 'Earnpaste';
     if (isEarnpaste) {
       if (!earnpasteUrl.trim() && !apiKey.trim()) { setError('Provide either an Earnpaste URL or an API key'); return; }
     } else {
       if (!earnpasteUrl.trim()) { setError('A link URL is required for this provider'); return; }
+    }
+    if (scripts.length > 0 && selectedScripts.length === 0) {
+      setError('Select at least one script to bind this provider to.');
+      return;
     }
 
     setSaving(true);
@@ -1306,13 +1310,13 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[hsl(0,0%,7%)] shadow-2xl"
+        className="w-full max-w-3xl max-h-[95vh] overflow-y-auto rounded-2xl border border-white/10 bg-[hsl(0,0%,7%)] shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4 sticky top-0 bg-[hsl(0,0%,7%)] z-10">
           <div>
-            <h3 className="text-sm font-semibold text-white">New Integration</h3>
-            <p className="text-xs text-white/40">Connect a monetization provider</p>
+            <h3 className="text-sm font-semibold text-white">Create Provider</h3>
+            <p className="text-xs text-white/40">Connect a monetization provider and bind it to script(s)</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors">
             <X className="h-5 w-5" />
@@ -1460,6 +1464,51 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
                 </select>
               </div>
 
+              {/* Script selection */}
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Attach scripts</p>
+                    <p className="text-xs text-white/40">Choose which script(s) this provider should apply to.</p>
+                  </div>
+                  <span className="text-xs text-white/40">{selectedScripts.length} selected</span>
+                </div>
+                <div className="grid gap-3">
+                  {scripts.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-4 text-sm text-white/40">
+                      No scripts available. Create at least one script first, then bind a provider to it here.
+                    </div>
+                  ) : (
+                    scripts.map(script => (
+                      <button
+                        key={script.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedScripts(prev =>
+                            prev.includes(script.id)
+                              ? prev.filter(id => id !== script.id)
+                              : [...prev, script.id],
+                          );
+                        }}
+                        className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+                          selectedScripts.includes(script.id)
+                            ? 'border-white/30 bg-white/[0.08]'
+                            : 'border-white/[0.07] bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-white">{script.name}</p>
+                            <p className="text-xs text-white/40 truncate">{script.id}</p>
+                          </div>
+                          <div className={`h-5 w-5 rounded-full border ${selectedScripts.includes(script.id) ? 'border-white bg-white' : 'border-white/20'}`} />
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+
               {/* HWID & UID lock dropdowns */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1528,7 +1577,7 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
                   className="h-9 px-4 rounded-full bg-white text-black text-sm font-medium hover:bg-white/90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  {saving ? 'Saving...' : 'Add Integration'}
+                  {saving ? 'Saving...' : 'Create Provider'}
                 </button>
                 <button onClick={onClose} className="h-9 px-4 rounded-full border border-white/10 text-sm text-white/60 hover:text-white">
                   Cancel
