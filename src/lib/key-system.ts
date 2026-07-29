@@ -286,7 +286,10 @@ ValidateBtn.MouseButton1Click:Connect(function()
                 setStatus(message or "Access granted.")
                 local enteredKey = getKeyText()
                 if enteredKey ~= "" and enteredKey ~= "test" then saveKey(normalizeKey(enteredKey)) end
-                showKeyOverlay(false)
+                        showKeyOverlay(false)
+                        pcall(function()
+                            if type(__soteria_run_original) == "function" then pcall(__soteria_run_original) end
+                        end)
             else
                 setStatus("Key Invalid")
             end
@@ -304,6 +307,9 @@ if savedKey and savedKey ~= "" then
                 validated = true
                 showKeyOverlay(false)
                 saveKey(normalizeKey(savedKey))
+                pcall(function()
+                    if type(__soteria_run_original) == "function" then pcall(__soteria_run_original) end
+                end)
             else
                 showKeyOverlay(true)
                 KeyBox.Text = "Your Key Here!"

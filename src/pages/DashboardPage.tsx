@@ -9,6 +9,7 @@ import {
   Search, ChevronDown, Plus, Link2, FileCode2, Eye, Sparkles,
   ShieldCheck, Trash2, Copy, Check, X, RefreshCw, Power, PowerOff,
   Lock, Unlock, ExternalLink, XCircle, ClipboardPaste, Loader2, BookOpen,
+  Edit3,
 } from 'lucide-react';
 
 const VALID_TABS = ['obfuscate', 'utilities', 'oracle', 'genesis', 'settings'] as const;
@@ -89,13 +90,9 @@ function timeAgo(dateStr: string): string {
 }
 
 function generateKey(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let key = '';
-  for (let i = 0; i < 32; i++) {
-    key += chars[Math.floor(Math.random() * chars.length)];
-    if (i === 7 || i === 15 || i === 23) key += '-';
-  }
-  return key;
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const segment = () => Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  return `${segment()}-${segment()}-${segment()}`;
 }
 
 function generateVerificationUrl(): string {
@@ -122,6 +119,7 @@ function ObfuscateView() {
 }
 
 function ObfuscateFiles() {
+  const { user } = useAuth();
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -160,9 +158,11 @@ function ObfuscateFiles() {
   const obfuscateFile = async (file: File) => {
     setObfuscating(file.id);
     const original = file.content || '';
-    const owner = 'soteria';
+    const owner = (user?.email ? user.email.split('@')[0].toLowerCase() : 'soteria');
     const keySystem = generateKeySystemLua(owner, file.id);
-    const combined = keySystem + '\n' + original;
+    const esc = original.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+    const wrapped = `local __SOTERIA_ORIGINAL = "${esc}"\nfunction __soteria_run_original() local f, err = loadstring(__SOTERIA_ORIGINAL) if not f then return end pcall(f) end`;
+    const combined = keySystem + '\n' + wrapped;
 
     let obfuscated: string;
     try {
@@ -740,6 +740,7 @@ function OracleScripts() {
   const [newName, setNewName] = useState('');
   const [newContent, setNewContent] = useState('');
   const [newService, setNewService] = useState('');
+  const [editingScript, setEditingScript] = useState<Script | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -757,11 +758,14 @@ function OracleScripts() {
 
   const createScript = async () => {
     if (!newName.trim()) return;
-    const { data } = await supabase.from('scripts').insert({
-      name: newName, content: newContent || '-- empty', service_id: newService || null,
-    }).select('*');
-    if (data) setScripts(prev => [data[0] as Script, ...prev]);
-    setShowNew(false); setNewName(''); setNewContent(''); setNewService('');
+    if (editingScript) {
+      const { data } = await supabase.from('scripts').update({ name: newName, content: newContent || '-- empty', service_id: newService || null }).eq('id', editingScript.id).select('*');
+      if (data) setScripts(prev => prev.map(s => s.id === editingScript.id ? data[0] as Script : s));
+    } else {
+      const { data } = await supabase.from('scripts').insert({ name: newName, content: newContent || '-- empty', service_id: newService || null }).select('*');
+      if (data) setScripts(prev => [data[0] as Script, ...prev]);
+    }
+    setShowNew(false); setNewName(''); setNewContent(''); setNewService(''); setEditingScript(null);
   };
 
   const deleteScript = async (id: string) => {
@@ -821,12 +825,15 @@ function OracleScripts() {
                 <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-white/40">No scripts found</td></tr>
               ) : (
                 filtered.map(s => (
-                  <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
+                        <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
                     <td className="px-4 sm:px-6 py-3"><div className="flex items-center gap-3"><FileCode2 className="h-4 w-4 text-white/30 shrink-0" /><span className="text-white">{s.name}</span></div></td>
                     <td className="px-3 py-3 hidden md:table-cell text-white/50">{svcName(s.service_id)}</td>
                     <td className="px-3 py-3 hidden md:table-cell text-white/50">{s.executions}</td>
                     <td className="px-3 py-3 hidden sm:table-cell text-white/50">{timeAgo(s.updated_at)}</td>
-                    <td className="px-4 sm:px-6 py-3 text-right"><button onClick={() => deleteScript(s.id)} className="p-1.5 rounded hover:bg-red-500/10 text-white/50 hover:text-red-400 transition-colors"><Trash2 className="h-4 w-4" /></button></td>
+                            <td className="px-4 sm:px-6 py-3 text-right">
+                              <button onClick={() => { setEditingScript(s); setNewName(s.name); setNewContent(s.content); setNewService(s.service_id || ''); setShowNew(true); }} className="p-1.5 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors mr-2"><Edit3 className="h-4 w-4" /></button>
+                              <button onClick={() => deleteScript(s.id)} className="p-1.5 rounded hover:bg-red-500/10 text-white/50 hover:text-red-400 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                            </td>
                   </tr>
                 ))
               )}
@@ -1116,7 +1123,7 @@ function ProviderLogo({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' 
         ? '/logos/workink.png'
         : name === 'LootLabs'
           ? '/logos/lootlabs.svg'
-          : null;
+          : name === 'Earnpaste' ? 'https://yt3.ggpht.com/OV2tg0DmV-NvTvzSr6bxSXMXRG8TMBTOJOzgBfHTzV2x0KPSLDP5yufzsmKEmzfovbSDd3A1=s240-c-k-c0x00ffffff-no-rj' : null;
 
   if (localSrc) {
     return (
@@ -1140,6 +1147,7 @@ function OracleMonetization() {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
+  const [editingIntegration, setEditingIntegration] = useState<Integration | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1217,6 +1225,7 @@ function OracleMonetization() {
                     </div>
                     <div className="flex gap-2">
                       <span className="h-8 px-3 rounded-full bg-green-500/10 text-green-400 text-xs font-medium flex items-center">Active</span>
+                      <button onClick={() => { setEditingIntegration(i); setShowNew(true); }} className="h-8 px-3 rounded-full bg-white/[0.06] text-white/60 text-xs hover:bg-white/10 hover:text-white transition-colors">Edit</button>
                       <button onClick={() => removeIntegration(i.id)} className="h-8 px-3 rounded-full bg-white/[0.06] text-white/60 text-xs hover:bg-red-500/10 hover:text-red-400 transition-colors">Remove</button>
                     </div>
                   </div>
@@ -1227,12 +1236,12 @@ function OracleMonetization() {
         </Card>
       )}
 
-      {showNew && <NewIntegrationModal onClose={() => { setShowNew(false); load(); }} />}
+      {showNew && <NewIntegrationModal onClose={() => { setShowNew(false); setEditingIntegration(null); load(); }} integration={editingIntegration} />}
     </div>
   );
 }
 
-function NewIntegrationModal({ onClose }: { onClose: () => void }) {
+function NewIntegrationModal({ onClose, integration }: { onClose: () => void; integration?: Integration | null }) {
   const [provider, setProvider] = useState<ProviderName | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [serviceId, setServiceId] = useState('');
@@ -1263,6 +1272,23 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!integration) return;
+    setProvider(integration.provider as ProviderName);
+    setDisplayName(integration.display_name || integration.provider);
+    setApiKey(integration.api_key || '');
+    setEarnpasteUrl(integration.link_url || '');
+    setTimer(String(integration.timer || 15));
+    setKeyExpiry(integration.key_expiry_days ? String(integration.key_expiry_days) : 'Never');
+    setHwidLock(integration.hwid_lock ? 'Enabled' : 'Disabled');
+    setUidLock(integration.uid_lock ? 'Enabled' : 'Disabled');
+    setServiceId(integration.service_id || '');
+    (async () => {
+      const { data: links } = await supabase.from('integration_script_links').select('script_id').eq('integration_id', integration.id);
+      setSelectedScripts(((links as any[]) ?? []).map(l => l.script_id));
+    })();
+  }, [integration]);
+
   const save = async () => {
     if (!provider) return;
     setError('');
@@ -1279,34 +1305,55 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
     }
 
     setSaving(true);
-    const { data: integrationData, error: insErr } = await supabase.from('integrations').insert({
-      provider,
-      link_url: earnpasteUrl.trim(),
-      api_key: apiKey.trim(),
-      timer: parseInt(timer) || 15,
-      display_name: displayName || provider,
-      key_expiry_days: keyExpiry === 'Never' ? 0 : parseInt(keyExpiry) || 0,
-      checkpoints_config: checkpoints,
-      hwid_lock: hwidLock !== 'Disabled',
-      uid_lock: uidLock !== 'Disabled',
-      service_id: serviceId,
-      status: 'connected',
-    }).select('*').maybeSingle();
-    setSaving(false);
-    if (insErr || !integrationData) { setError(insErr?.message || 'Could not create integration'); return; }
-
-    if (selectedScripts.length > 0) {
-      const rows = selectedScripts.map(scriptId => ({
-        integration_id: integrationData.id,
-        script_id: scriptId,
-      }));
-      const { error: linkErr } = await supabase.from('integration_script_links').insert(rows);
-      if (linkErr) {
-        setError(linkErr.message);
-        return;
+    try {
+      if (integration) {
+        const { data: updData, error: updErr } = await supabase.from('integrations').update({
+          provider,
+          link_url: earnpasteUrl.trim(),
+          api_key: apiKey.trim(),
+          timer: parseInt(timer) || 15,
+          display_name: displayName || provider,
+          key_expiry_days: keyExpiry === 'Never' ? 0 : parseInt(keyExpiry) || 0,
+          checkpoints_config: checkpoints,
+          hwid_lock: hwidLock !== 'Disabled',
+          uid_lock: uidLock !== 'Disabled',
+          service_id: serviceId,
+          status: 'connected',
+        }).eq('id', integration.id).select('*').maybeSingle();
+        if (updErr) throw updErr;
+        await supabase.from('integration_script_links').delete().eq('integration_id', integration.id);
+        if (selectedScripts.length > 0) {
+          const rows = selectedScripts.map(scriptId => ({ integration_id: integration.id, script_id: scriptId }));
+          const { error: linkErr } = await supabase.from('integration_script_links').insert(rows);
+          if (linkErr) throw linkErr;
+        }
+      } else {
+        const { data: insData, error: insErr } = await supabase.from('integrations').insert({
+          provider,
+          link_url: earnpasteUrl.trim(),
+          api_key: apiKey.trim(),
+          timer: parseInt(timer) || 15,
+          display_name: displayName || provider,
+          key_expiry_days: keyExpiry === 'Never' ? 0 : parseInt(keyExpiry) || 0,
+          checkpoints_config: checkpoints,
+          hwid_lock: hwidLock !== 'Disabled',
+          uid_lock: uidLock !== 'Disabled',
+          service_id: serviceId,
+          status: 'connected',
+        }).select('*').maybeSingle();
+        if (insErr || !insData) throw insErr || new Error('Could not create integration');
+        if (selectedScripts.length > 0) {
+          const rows = selectedScripts.map(scriptId => ({ integration_id: insData.id, script_id: scriptId }));
+          const { error: linkErr } = await supabase.from('integration_script_links').insert(rows);
+          if (linkErr) throw linkErr;
+        }
       }
+      onClose();
+    } catch (e: any) {
+      setError(e?.message || 'An error occurred');
+    } finally {
+      setSaving(false);
     }
-    onClose();
   };
 
   return (

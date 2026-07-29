@@ -100,7 +100,7 @@ export function NotFoundPage() {
           <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/5 to-transparent" />
 
           <div className="mb-10 text-center">
-            <p className="text-sm uppercase tracking-[0.35em] text-slate-500">404 - page not found</p>
+            <p className="text-sm uppercase tracking-[0.35em] text-slate-500">Page Not Found!</p>
             <h1 className="mt-6 text-[clamp(4rem,12vw,9rem)] font-black leading-none text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-blue-400">
               404
             </h1>

@@ -73,14 +73,22 @@ export function GatePage() {
       .eq('status', 'connected')
       .order('created_at', { ascending: true });
     const all = (intData as Integration[]) ?? [];
-    const filtered = all.filter(i => !i.service_id || i.service_id === fileData.service_id);
+
+    // Filter integrations linked to this file via integration_script_links
+    const { data: linkData } = await supabase
+      .from('integration_script_links')
+      .select('integration_id')
+      .eq('script_id', fileData.id);
+    const linkedIds = new Set((linkData ?? []).map(l => l.integration_id));
+    const filtered = all.filter(i => linkedIds.has(i.id));
+
     setIntegrations(filtered);
     setState('ready');
   }, [owner, scriptId]);
 
   useEffect(() => { load(); }, [load]);
 
-  const allVisited = integrations.length > 0 && visited.size >= integrations.length;
+  const allVisited = visited.size >= integrations.length;
 
   // Auto-verify when returning from Earnpaste with ?verify=1
   useEffect(() => {
