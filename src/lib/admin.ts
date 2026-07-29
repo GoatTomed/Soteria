@@ -1,5 +1,8 @@
 export async function createUserAdmin(username: string, password: string) {
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`;
+  // Debug: log request target to help diagnose 405s in-browser
+  try { console.debug('[createUserAdmin] POST', url); } catch {}
+
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -18,7 +21,10 @@ export async function createUserAdmin(username: string, password: string) {
   } catch {
     text = '';
   }
-
   const body = json ?? (text ? { text } : {});
+
+  // Debug: expose response details in browser console
+  try { console.debug('[createUserAdmin] response', { status: res.status, body, bodyText: text }); } catch {}
+
   return { ok: res.ok, status: res.status, body, bodyText: text };
 }
