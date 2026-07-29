@@ -250,9 +250,31 @@ export function GatePage() {
 
         {/* Checkpoint list — one per integration */}
         {integrations.length === 0 ? (
-          <div className="py-6 text-center">
+          <div className="py-6 text-center space-y-4">
             <Sparkles className="mx-auto h-8 w-8 text-brand-300/60 mb-3" />
-            <p className="text-sm text-white/50">No checkpoints configured. You can claim your key directly.</p>
+            <p className="text-sm text-white/50">No checkpoints are configured for this gate yet.</p>
+            <p className="text-sm text-white/40">Configure your checkpoints at the dashboard:</p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link
+                to="/gate"
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-white/10"
+              >
+                Go to Gate
+              </Link>
+              <Link
+                to="/oracle/monetization"
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-white/10"
+              >
+                Go to Monetization
+              </Link>
+              <Link
+                to="/?tutorial"
+                className="inline-flex items-center gap-2 rounded-full border border-brand-400 bg-brand-500/10 px-4 py-2 text-xs font-medium text-brand-200 hover:bg-brand-500/20 transition-colors"
+              >
+                Start dashboard tutorial
+              </Link>
+            </div>
+            <p className="text-xs text-white/30">The tutorial will walk you through the dashboard setup and show where to add checkpoints.</p>
           </div>
         ) : (
           <div className="space-y-3">

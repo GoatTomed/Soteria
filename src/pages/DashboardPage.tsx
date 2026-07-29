@@ -40,18 +40,31 @@ function tabToPath(tab: string, oracleSub?: string): string {
 export function DashboardPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const tutorialMode = new URLSearchParams(location.search).has('tutorial');
   const { tab: urlTab, oracleSub } = pathToTab(location.pathname);
-  const [tab, setTab] = useState(urlTab);
+  const [tab, setTab] = useState(tutorialMode ? 'gate' : urlTab);
+  const [showTutorial, setShowTutorial] = useState(tutorialMode);
 
-  // Sync from URL when browser back/forward is used
   useEffect(() => {
     const { tab: t } = pathToTab(location.pathname);
-    if (t !== tab) setTab(t);
-  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (t !== tab && !tutorialMode) setTab(t);
+  }, [location.pathname, tutorialMode, tab]);
+
+  useEffect(() => {
+    setShowTutorial(tutorialMode);
+    if (tutorialMode && tab !== 'gate') {
+      setTab('gate');
+    }
+  }, [tutorialMode]);
 
   const handleTabChange = (newTab: string) => {
     setTab(newTab);
     navigate(tabToPath(newTab));
+  };
+
+  const closeTutorial = () => {
+    setShowTutorial(false);
+    navigate(location.pathname, { replace: true });
   };
 
   return (
@@ -62,6 +75,7 @@ export function DashboardPage() {
       {tab === 'oracle' && <OracleView initialSub={oracleSub} onSubChange={(sub) => navigate(tabToPath('oracle', sub))} />}
       {tab === 'genesis' && <GenesisView />}
       {tab === 'settings' && <SettingsView />}
+      {showTutorial && <TutorialOverlay onClose={closeTutorial} />}
     </DashboardShell>
   );
 }
@@ -79,6 +93,64 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function TutorialOverlay({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6">
+      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-950/95 p-6 shadow-2xl">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Dashboard tutorial</h2>
+              <p className="text-sm text-white/60 mt-1">Follow these steps to configure gate checkpoints and start issuing keys.</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="rounded-full bg-white/5 px-3 py-2 text-xs font-medium text-white/70 hover:bg-white/10"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="grid gap-3">
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/40">Step 1</p>
+              <p className="mt-2 font-semibold text-white">Open the Gate tab</p>
+              <p className="mt-1 text-sm text-white/60">This is where you choose which scripts are available through your gate URL.</p>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/40">Step 2</p>
+              <p className="mt-2 font-semibold text-white">Connect monetization providers</p>
+              <p className="mt-1 text-sm text-white/60">Go to Oracle → Monetization to link Earnpaste, Linkvertise, Work.ink, or LootLabs.</p>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/40">Step 3</p>
+              <p className="mt-2 font-semibold text-white">Enable checkpoints and generate keys</p>
+              <p className="mt-1 text-sm text-white/60">Once your gate has monetization steps, your public gate page will issue keys after checkpoint completion.</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white/80 hover:bg-white/10"
+            >
+              Dismiss tutorial
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.href = '/gate'}
+              className="rounded-full bg-brand-500 px-4 py-3 text-sm font-semibold text-white hover:bg-brand-400"
+            >
+              Go to Gate tab
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function timeAgo(dateStr: string): string {
