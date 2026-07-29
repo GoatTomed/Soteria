@@ -18,10 +18,11 @@ export function LoginPage() {
     setError('');
     setLoading(true);
 
+    const clean = username.trim().toLowerCase();
     const { data: profile, error: lookupErr } = await supabase
       .from('profiles')
       .select('id')
-      .eq('username', username.trim().toLowerCase())
+      .eq('username', clean)
       .maybeSingle();
 
     if (lookupErr || !profile) {
@@ -30,8 +31,19 @@ export function LoginPage() {
       return;
     }
 
-    const email = `${username.trim().toLowerCase()}@soteria.users`;
-    const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+    const domains = ['dev', 'members'];
+    let signInErr = null;
+
+    for (const domain of domains) {
+      const email = `${clean}@soteria.${domain}`;
+      const result = await supabase.auth.signInWithPassword({ email, password });
+      if (!result.error) {
+        signInErr = null;
+        break;
+      }
+      signInErr = result.error;
+    }
+
     setLoading(false);
 
     if (signInErr) {

@@ -37,7 +37,7 @@ export function SignupPage() {
       return;
     }
 
-    const email = `${clean}@soteria.users`;
+    const email = `${clean}@soteria.members`;
     const { data, error: signUpErr } = await supabase.auth.signUp({ email, password });
 
     if (signUpErr || !data.user) {

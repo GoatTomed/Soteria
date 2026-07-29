@@ -1,10 +1,7 @@
 import { useState } from 'react';
 import { Navigate, Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
-import { Copy, Check, Lock, ArrowLeft } from 'lucide-react';
-
-const ALLOWED_USERNAMES = ['president', 'yoursuck', 'yourSuck'];
+import { Copy, Check, ArrowLeft } from 'lucide-react';
 
 // Real opcode-to-function mappings extracted from the WeAreDevs obfuscated output.
 // The obfuscator uses b(x) = z[x + 65360] to index a custom-base64-encoded string table.
@@ -105,50 +102,11 @@ function generateTxt(): string {
 
 export function StackedPage() {
   const { user, loading } = useAuth();
-  const [username, setUsername] = useState<string | null>(null);
-  const [usernameLoading, setUsernameLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
   if (loading) return <div className="min-h-screen bg-[hsl(0,0%,5%)]" />;
 
   if (!user) return <Navigate to="/login?redirect=/stacked" replace />;
-
-  if (usernameLoading) {
-    supabase
-      .from('profiles')
-      .select('username')
-      .eq('id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setUsername(data?.username ?? null);
-        setUsernameLoading(false);
-      });
-    return <div className="min-h-screen bg-[hsl(0,0%,5%)]" />;
-  }
-
-  const isAllowed = username !== null && ALLOWED_USERNAMES.includes(username.toLowerCase());
-
-  if (!isAllowed) {
-    return (
-      <div className="min-h-screen bg-[hsl(0,0%,5%)] flex items-center justify-center px-6">
-        <div className="max-w-md w-full text-center">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-red-500/10 flex items-center justify-center mb-5">
-            <Lock className="h-8 w-8 text-red-400" />
-          </div>
-          <h1 className="text-xl font-semibold text-white mb-2">Access Denied</h1>
-          <p className="text-sm text-white/40 mb-6">
-            This page is restricted. You do not have permission to view this content.
-          </p>
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 h-10 px-5 rounded-full bg-white/10 text-sm text-white/70 hover:bg-white/15 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back to Dashboard
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   const txtContent = generateTxt();
 
