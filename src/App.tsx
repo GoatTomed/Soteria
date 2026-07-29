@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { ProfilePage } from '@/pages/ProfilePage';
 import { UnobfuscatedPage } from '@/pages/UnobfuscatedPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { SignupPage } from '@/pages/SignupPage';
@@ -58,6 +59,7 @@ function AppRoutes() {
       <Route path="/oracle/:subtab" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/genesis" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/unobfuscated" element={<DevAccessRoute><UnobfuscatedPage /></DevAccessRoute>} />
       <Route path="/stacked" element={<DevAccessRoute><StackedPage /></DevAccessRoute>} />
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />

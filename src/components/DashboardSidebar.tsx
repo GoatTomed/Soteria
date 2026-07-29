@@ -7,7 +7,7 @@ import {
   Settings,
   Menu,
   Bell,
-  LogOut,
+  User,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
@@ -85,7 +85,7 @@ export function DashboardSidebar({ activeTab, onTabChange, mobileOpen, onMobileC
           onClick={() => { onTabChange('settings'); onMobileClose(); }}
         />
         <button
-          onClick={() => { signOut(); navigate('/login'); }}
+          onClick={() => { navigate('/profile'); onMobileClose(); }}
           className="w-full flex items-center gap-2 rounded-md px-2 py-2.5 hover:bg-white/[0.05] transition-colors mt-0.5"
         >
           <span className="h-8 w-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-semibold text-white shrink-0">
@@ -93,9 +93,9 @@ export function DashboardSidebar({ activeTab, onTabChange, mobileOpen, onMobileC
           </span>
           <div className="flex-1 text-left min-w-0">
             <p className="text-sm font-medium text-white truncate">{email}</p>
-            <p className="text-xs text-white/40 truncate">Click to sign out</p>
+            <p className="text-xs text-white/40 truncate">View profile</p>
           </div>
-          <LogOut className="h-4 w-4 text-white/30 shrink-0" />
+          <User className="h-4 w-4 text-white/30 shrink-0" />
         </button>
       </div>
     </div>
