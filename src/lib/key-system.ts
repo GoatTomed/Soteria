@@ -1,325 +1,198 @@
 /**
  * Generates the Soteria Lua key system code for a given owner username and script id.
- * The key system shows a draggable GUI card, validates the key against
- * the Soteria verify-key edge function, and saves/restores the key locally.
+ * The key system validates a key against the Soteria verify-gate endpoint and
+ * saves/restores the key locally so the script can run once the gate succeeds.
  */
-export function generateKeySystemLua(ownerUsername: string | null, scriptId: string): string {
+function getSystemUrls(ownerUsername: string | null, scriptId: string) {
   const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || 'https://bcedukdmqieckhpsrrcx.supabase.co').replace(/\/$/, '');
   const verifyUrl = `${supabaseUrl}/functions/v1/verify-gate`;
   const siteBase = (import.meta.env.VITE_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173')).replace(/\/$/, '');
   const safeOwner = (ownerUsername || '').trim().toLowerCase();
   const gateUrl = safeOwner ? `${siteBase}/gate/${encodeURIComponent(safeOwner)}/${scriptId}` : `${siteBase}/gate/${scriptId}`;
-  const keyFile = "soteria_key.txt";
+  return { verifyUrl, gateUrl };
+}
+
+export function generateKeySystemLua(ownerUsername: string | null, scriptId: string): string {
+  const { verifyUrl, gateUrl } = getSystemUrls(ownerUsername, scriptId);
+  const keyFile = 'soteria_key.txt';
 
   return `-- Soteria Key System
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 
 while not Players.LocalPlayer do task.wait(0.1) end
 local LocalPlayer = Players.LocalPlayer
 
 local VALIDATE_URL = "${verifyUrl}"
-local GET_KEY_URL  = "${gateUrl}"
-local KEY_FILE     = "${keyFile}"
+local GET_KEY_URL = "${gateUrl}"
+local KEY_FILE = "${keyFile}"
 
-local Theme = {
-    Surface = Color3.fromRGB(24, 24, 24),
-    Raised  = Color3.fromRGB(30, 30, 30),
-    Border  = Color3.fromRGB(40, 40, 40),
-    Accent  = Color3.fromRGB(247, 197, 46),
-    Text    = Color3.fromRGB(240, 240, 240),
-    TextMid = Color3.fromRGB(150, 150, 150),
-}
+local function canRead()
+  return type(readfile) == "function" or type(read_file) == "function"
+end
 
-local function canRead()  return type(readfile)  == "function" or type(read_file)  == "function" end
-local function canWrite() return type(writefile) == "function" or type(write_file) == "function" end
+local function canWrite()
+  return type(writefile) == "function" or type(write_file) == "function"
+end
 
 local function fileExists(path)
-    if type(isfile) == "function" then return isfile(path) end
-    if type(is_file) == "function" then return is_file(path) end
-    return false
+  if type(isfile) == "function" then return isfile(path) end
+  if type(is_file) == "function" then return is_file(path) end
+  return false
 end
 
 local function readFile(path)
-    if type(readfile)  == "function" then return pcall(readfile,  path) end
-    if type(read_file) == "function" then return pcall(read_file, path) end
-    return false, nil
+  if type(readfile) == "function" then return pcall(readfile, path) end
+  if type(read_file) == "function" then return pcall(read_file, path) end
+  return false, nil
 end
 
 local function writeFile(path, content)
-    if type(writefile)  == "function" then return pcall(writefile,  path, content) end
-    if type(write_file) == "function" then return pcall(write_file, path, content) end
-    return false
+  if type(writefile) == "function" then return pcall(writefile, path, content) end
+  if type(write_file) == "function" then return pcall(write_file, path, content) end
+  return false
 end
 
 local function getSavedKey()
-    if not canRead() then return nil end
-    if fileExists(KEY_FILE) then
-        local ok, content = readFile(KEY_FILE)
-        if ok and type(content) == "string" then
-            return content:gsub("^%s*(.-)%s*$", "%1")
-        end
-    end
+  if not canRead() then return nil end
+  if fileExists(KEY_FILE) then
     local ok, content = readFile(KEY_FILE)
-    if ok and type(content) == "string" then
-        return content:gsub("^%s*(.-)%s*$", "%1")
-    end
-    return nil
+    if ok and type(content) == "string" then return content:gsub("^%s*(.-)%s*$", "%1") end
+  end
+  return nil
 end
 
 local function saveKey(key)
-    if key == "test" or not canWrite() then return end
-    writeFile(KEY_FILE, key)
-end
-
-local function hasHttp()
-    return type(request) == "function"
-        or (type(syn) == "table" and type(syn.request) == "function")
-        or (type(http) == "table" and type(http.request) == "function")
-        or type(http_request) == "function"
-        or (type(fluxus) == "table" and type(fluxus.request) == "function")
-        or (HttpService and type(HttpService.PostAsync) == "function")
-end
-
-local function safePost(url, bodyTable)
-    local ok, encoded = pcall(function() return HttpService:JSONEncode(bodyTable or {}) end)
-    local payload = ok and encoded or "{}"
-    local headers = { ["Content-Type"] = "application/json" }
-    local attempts = {
-        function() return request and request({ Url = url, Method = "POST", Body = payload, Headers = headers }) end,
-        function() return syn and syn.request and syn.request({ Url = url, Method = "POST", Body = payload, Headers = headers }) end,
-        function() return http and http.request and http.request({ Url = url, Method = "POST", Body = payload, Headers = headers }) end,
-        function() return http_request and http_request({ Url = url, Method = "POST", Body = payload, Headers = headers }) end,
-        function() return fluxus and fluxus.request and fluxus.request({ Url = url, Method = "POST", Body = payload, Headers = headers }) end,
-        function() return HttpService and HttpService.PostAsync and HttpService:PostAsync(url, payload, Enum.HttpContentType.ApplicationJson) end,
-    }
-    for _, fn in ipairs(attempts) do
-        if fn then
-            local s, res = pcall(fn)
-            if s and res then
-                local body = type(res) == "table" and res.Body or res
-                if type(body) == "string" then return true, body end
-            end
-        end
-    end
-    return false, "no HTTP method available"
+  if not canWrite() then return end
+  writeFile(KEY_FILE, key)
 end
 
 local function normalizeKey(str)
-    local s = tostring(str or ""):gsub("^%s*(.-)%s*$", "%1"):gsub("[%c%s]+", ""):gsub("[^A-Za-z0-9]", ""):upper()
-    if #s == 9 then s = s:gsub("(...)(...)(...)", "%1-%2-%3") end
-    return s
+  local s = tostring(str or ""):gsub("^%s*(.-)%s*$", "%1"):gsub("[%c%s]+", ""):gsub("[^A-Za-z0-9]", ""):upper()
+  if #s == 9 then s = s:gsub("(...)(...)(...)", "%1-%2-%3") end
+  return s
 end
 
-local function make(class, props)
-    local obj = Instance.new(class)
-    for k, v in pairs(props or {}) do
-        if k ~= "Parent" then obj[k] = v end
+local function safePost(url, bodyTable)
+  local payload = HttpService:JSONEncode(bodyTable or {})
+  local headers = { ["Content-Type"] = "application/json" }
+
+  local attempts = {
+    function() return request and request({ Url = url, Method = "POST", Body = payload, Headers = headers }) end,
+    function() return syn and syn.request and syn.request({ Url = url, Method = "POST", Body = payload, Headers = headers }) end,
+    function() return http and http.request and http.request({ Url = url, Method = "POST", Body = payload, Headers = headers }) end,
+    function() return HttpService and HttpService.PostAsync and HttpService:PostAsync(url, payload, Enum.HttpContentType.ApplicationJson) end,
+  }
+
+  for _, fn in ipairs(attempts) do
+    if fn then
+      local ok, res = pcall(fn)
+      if ok and res then
+        local body = type(res) == "table" and res.Body or res
+        if type(body) == "string" then return true, body end
+      end
     end
-    if props and props.Parent then obj.Parent = props.Parent end
-    return obj
+  end
+
+  return false, "no HTTP method available"
 end
 
-local function tween(obj, goal, t)
-    TweenService:Create(obj, TweenInfo.new(t or 0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), goal):Play()
-end
+local function showGatePrompt()
+  local ScreenGui = Instance.new("ScreenGui")
+  ScreenGui.Name = "SoteriaGate"
+  ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+  local Frame = Instance.new("Frame")
+  Frame.Size = UDim2.fromOffset(340, 180)
+  Frame.Position = UDim2.fromOffset(30, 60)
+  Frame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+  Frame.BorderSizePixel = 0
+  Frame.Parent = ScreenGui
 
-local ScreenGui = make("ScreenGui", {
-    Name = "Soteria", ResetOnSpawn = false,
-    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    IgnoreGuiInset = true, Parent = PlayerGui,
-})
+  local Corner = Instance.new("UICorner")
+  Corner.CornerRadius = UDim.new(0, 12)
+  Corner.Parent = Frame
 
-local Overlay = make("Frame", {
-    Name = "KeyOverlay", Size = UDim2.new(1, 0, 1, 0),
-    Position = UDim2.new(0, 0, 0, 0),
-    BackgroundColor3 = Color3.fromRGB(0, 0, 0),
-    BackgroundTransparency = 0.55, ZIndex = 999, Parent = ScreenGui,
-})
-make("UICorner", { CornerRadius = UDim.new(0, 12), Parent = Overlay })
+  local Title = Instance.new("TextLabel")
+  Title.Size = UDim2.new(1, -24, 0, 28)
+  Title.Position = UDim2.new(0, 12, 0, 12)
+  Title.BackgroundTransparency = 1
+  Title.TextColor3 = Color3.fromRGB(240, 240, 240)
+  Title.Text = "Soteria Gate"
+  Title.Font = Enum.Font.GothamBold
+  Title.TextSize = 18
+  Title.Parent = Frame
 
-local dragging, dragStart, startPos = false, nil, nil
-local function makeDraggable(dragHandle, dragTarget)
-    dragHandle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = dragTarget.Position
-        end
-    end)
-    dragHandle.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            dragTarget.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-end
+  local Input = Instance.new("TextBox")
+  Input.Size = UDim2.new(1, -24, 0, 36)
+  Input.Position = UDim2.new(0, 12, 0, 54)
+  Input.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+  Input.TextColor3 = Color3.fromRGB(240, 240, 240)
+  Input.PlaceholderText = "Enter your key"
+  Input.ClearTextOnFocus = false
+  Input.Parent = Frame
 
-local Card = make("Frame", {
-    Name = "KeyCard", Size = UDim2.new(0, 380, 0, 220),
-    Position = UDim2.new(0.5, -190, 0.5, -110),
-    BackgroundColor3 = Theme.Surface, Parent = Overlay,
-})
-make("UICorner", { CornerRadius = UDim.new(0, 12), Parent = Card })
-make("UIStroke", { Color = Theme.Border, Thickness = 1, Parent = Card })
-makeDraggable(Card, Card)
+  local Button = Instance.new("TextButton")
+  Button.Size = UDim2.new(1, -24, 0, 36)
+  Button.Position = UDim2.new(0, 12, 0, 104)
+  Button.BackgroundColor3 = Color3.fromRGB(247, 197, 46)
+  Button.TextColor3 = Color3.fromRGB(18, 18, 18)
+  Button.Text = "Verify"
+  Button.Font = Enum.Font.GothamBold
+  Button.TextSize = 16
+  Button.Parent = Frame
 
-make("TextLabel", {
-    Name = "Title", Size = UDim2.new(1, -40, 0, 24),
-    Position = UDim2.new(0, 20, 0, 16), BackgroundTransparency = 1,
-    Text = "Soteria", TextColor3 = Theme.Text,
-    Font = Enum.Font.Gotham, TextSize = 18,
-    TextXAlignment = Enum.TextXAlignment.Left, Parent = Card,
-})
+  local Status = Instance.new("TextLabel")
+  Status.Size = UDim2.new(1, -24, 0, 24)
+  Status.Position = UDim2.new(0, 12, 0, 148)
+  Status.BackgroundTransparency = 1
+  Status.TextColor3 = Color3.fromRGB(150, 150, 150)
+  Status.Text = "Checking access..."
+  Status.Font = Enum.Font.Gotham
+  Status.TextSize = 13
+  Status.Parent = Frame
 
-local KeyBox = make("TextBox", {
-    Name = "KeyBox", Size = UDim2.new(1, -40, 0, 36),
-    Position = UDim2.new(0, 20, 0, 72), BackgroundColor3 = Theme.Raised,
-    BorderSizePixel = 0, Text = "Your Key Here!", PlaceholderText = "",
-    TextColor3 = Color3.fromRGB(255, 255, 255),
-    PlaceholderColor3 = Theme.TextMid, Font = Enum.Font.Gotham,
-    TextSize = 14, ClearTextOnFocus = false, Parent = Card,
-})
-make("UICorner", { CornerRadius = UDim.new(0, 10), Parent = KeyBox })
-
-KeyBox.Focused:Connect(function()
-    if KeyBox.Text == "Your Key Here!" then KeyBox.Text = "" end
-end)
-KeyBox.FocusLost:Connect(function()
-    if KeyBox.Text:gsub("^%s*(.-)%s*$", "%1") == "" then KeyBox.Text = "Your Key Here!" end
-end)
-
-local StatusLabel = make("TextLabel", {
-    Name = "Status", Size = UDim2.new(1, -40, 0, 20),
-    Position = UDim2.new(0, 20, 0, 116), BackgroundTransparency = 1,
-    Text = "", TextColor3 = Theme.TextMid, Font = Enum.Font.Gotham,
-    TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, Parent = Card,
-})
-
-local FetchBtn = make("TextButton", {
-    Name = "FetchBtn", Size = UDim2.new(0, 120, 0, 34),
-    Position = UDim2.new(0.5, -130, 1, -50), BackgroundColor3 = Theme.Raised,
-    AutoButtonColor = false, Text = "Get Key", TextColor3 = Theme.Text,
-    Font = Enum.Font.Gotham, TextSize = 14, Parent = Card,
-})
-make("UICorner", { CornerRadius = UDim.new(0, 10), Parent = FetchBtn })
-
-local ValidateBtn = make("TextButton", {
-    Name = "Validate", Size = UDim2.new(0, 120, 0, 34),
-    Position = UDim2.new(0.5, 10, 1, -50), BackgroundColor3 = Theme.Accent,
-    AutoButtonColor = false, Text = "Verify",
-    TextColor3 = Color3.fromRGB(15, 15, 15),
-    Font = Enum.Font.Gotham, TextSize = 14, Parent = Card,
-})
-make("UICorner", { CornerRadius = UDim.new(0, 10), Parent = ValidateBtn })
-
-local CloseBtn = make("TextButton", {
-    Name = "CloseBtn", Size = UDim2.new(0, 22, 0, 22),
-    Position = UDim2.new(1, -30, 0, 8), BackgroundColor3 = Color3.fromRGB(239, 68, 68),
-    AutoButtonColor = false, Text = "X", TextColor3 = Color3.fromRGB(255, 255, 255),
-    Font = Enum.Font.GothamBold, TextSize = 11,
-    TextXAlignment = Enum.TextXAlignment.Center,
-    TextYAlignment = Enum.TextYAlignment.Center, Parent = Card,
-})
-make("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = CloseBtn })
-make("UIStroke", { Color = Color3.fromRGB(180, 40, 40), Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = CloseBtn })
-
-CloseBtn.MouseEnter:Connect(function() tween(CloseBtn, { BackgroundColor3 = Color3.fromRGB(220, 50, 50) }) end)
-CloseBtn.MouseLeave:Connect(function() tween(CloseBtn, { BackgroundColor3 = Color3.fromRGB(239, 68, 68) }) end)
-
-local function setStatus(text)
-    if StatusLabel then StatusLabel.Text = tostring(text or "") end
-end
-
-local function showKeyOverlay(visible)
-    if Overlay then Overlay.Visible = visible and true or false end
-end
-
-local validated = false
-
-local function getKeyText()
-    local t = tostring(KeyBox.Text or "")
-    if t == "Your Key Here!" then return "" end
-    return t:gsub("^%s*(.-)%s*$", "%1")
-end
-
-local function validateKey(key, onResult)
-    if key == "test" then onResult(true, "Test key accepted.") return end
-    local norm = normalizeKey(key)
-    if not norm:match("^[A-Z0-9][A-Z0-9][A-Z0-9]%-[A-Z0-9][A-Z0-9][A-Z0-9]%-[A-Z0-9][A-Z0-9][A-Z0-9]$") then
-        onResult(false, "Key Invalid") return
+  Button.MouseButton1Click:Connect(function()
+    local key = normalizeKey(Input.Text)
+    if key == "" then
+      Status.Text = "Enter a valid key"
+      return
     end
-    if not hasHttp() then onResult(false, "Key Invalid") return end
-    setStatus("Validating...")
-    local ok, body = safePost(VALIDATE_URL, { key = norm })
-    if not ok or type(body) ~= "string" then onResult(false, "Key Invalid") return end
-    local decOk, data = pcall(function() return HttpService:JSONDecode(body) end)
-    if not decOk or type(data) ~= "table" then onResult(false, "Key Invalid") return end
-    local isValid = data.valid == true or data.success == true or tostring(data.status or ""):lower() == "success"
-    local message = tostring(data.message or data.error or (isValid and "Access granted." or "Key Invalid"))
-    onResult(isValid, message)
-end
 
-CloseBtn.MouseButton1Click:Connect(function() task.wait(0.1) ScreenGui:Destroy() end)
-FetchBtn.MouseButton1Click:Connect(function()
-    if setclipboard then pcall(setclipboard, GET_KEY_URL) end
-    setStatus("Key URL copied to clipboard.")
-end)
-ValidateBtn.MouseButton1Click:Connect(function()
-    if validated then return end
-    local key = getKeyText()
-    if key == "" then setStatus("Key Invalid") return end
-    setStatus("Validating...")
-    task.spawn(function()
-        validateKey(key, function(success, message)
-            if success then
-                validated = true
-                setStatus(message or "Access granted.")
-                local enteredKey = getKeyText()
-                if enteredKey ~= "" and enteredKey ~= "test" then saveKey(normalizeKey(enteredKey)) end
-                        showKeyOverlay(false)
-                        pcall(function()
-                            if type(__soteria_run_original) == "function" then pcall(__soteria_run_original) end
-                        end)
-            else
-                setStatus("Key Invalid")
-            end
-        end)
-    end)
-end)
+    local ok, body = safePost(VALIDATE_URL, { key = key, script_id = "${scriptId}" })
+    if ok and body and body:find("valid") then
+      saveKey(key)
+      Status.Text = "Access granted"
+      ScreenGui:Destroy()
+    else
+      Status.Text = "Invalid key"
+    end
+  end)
+end
 
 local savedKey = getSavedKey()
-if savedKey and savedKey ~= "" then
-    Overlay.Visible = false
-    task.spawn(function()
-        task.wait(0.2)
-        validateKey(savedKey, function(success, message)
-            if success then
-                validated = true
-                showKeyOverlay(false)
-                saveKey(normalizeKey(savedKey))
-                pcall(function()
-                    if type(__soteria_run_original) == "function" then pcall(__soteria_run_original) end
-                end)
-            else
-                showKeyOverlay(true)
-                KeyBox.Text = "Your Key Here!"
-                setStatus("")
-            end
-        end)
-    end)
+if savedKey then
+  local ok, body = safePost(VALIDATE_URL, { key = savedKey, script_id = "${scriptId}" })
+  if not (ok and body and body:find("valid")) then
+    showGatePrompt()
+  end
 else
-    Overlay.Visible = true
-    KeyBox.Text = "Your Key Here!"
+  showGatePrompt()
 end
 `;
+}
+
+function escapeLuaContent(content: string): string {
+  return content
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n');
+}
+
+export function generateWrappedKeySystemLua(ownerUsername: string | null, scriptId: string, content: string): string {
+  const wrapper = generateKeySystemLua(ownerUsername, scriptId);
+  const escaped = escapeLuaContent(content);
+  return `${wrapper}\nlocal __SOTERIA_ORIGINAL = "${escaped}"\nfunction __soteria_run_original()\n  local f, err = loadstring(__SOTERIA_ORIGINAL)\n  if not f then return end\n  pcall(f)\nend\n__soteria_run_original()`;
 }
