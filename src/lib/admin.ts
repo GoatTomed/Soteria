@@ -1,3 +1,5 @@
+import { supabaseUrl } from '@/lib/supabase';
+
 export async function createUserAdmin(username: string, password: string) {
   const url = `${supabaseUrl}/functions/v1/admin-create-user`;
   // Debug: log request target to help diagnose 405s in-browser
