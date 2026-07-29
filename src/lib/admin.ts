@@ -1,5 +1,8 @@
 import { supabaseUrl } from '@/lib/supabase';
 
+const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjZWR1a2RtcWllY2tocHNycmN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyODE5OTAsImV4cCI6MjEwMDg1Nzk5MH0.k9HcY0d42rP3NoX2sySFCneQcYwCdc29mEG0YnErNRU';
+
 export async function createUserAdmin(username: string, password: string) {
   const url = `${supabaseUrl}/functions/v1/admin-create-user`;
   // Debug: log request target to help diagnose 405s in-browser
@@ -7,7 +10,11 @@ export async function createUserAdmin(username: string, password: string) {
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${anonKey}`,
+      apikey: anonKey,
+    },
     body: JSON.stringify({ username, password }),
   });
 

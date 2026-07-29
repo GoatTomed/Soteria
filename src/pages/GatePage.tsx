@@ -109,9 +109,11 @@ export function GatePage() {
     // Earnpaste: use the edge function to generate a paste link
     try {
       const gateUrl = `${window.location.origin}/gate/${owner ?? ''}/${scriptId}?verify=1`;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ||
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjZWR1a2RtcWllY2tocHNycmN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyODE5OTAsImV4cCI6MjEwMDg1Nzk5MH0.k9HcY0d42rP3NoX2sySFCneQcYwCdc29mEG0YnErNRU';
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/earnpaste-paste`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anonKey}`, apikey: anonKey },
         body: JSON.stringify({ targetUrl: gateUrl, integrationId: intId }),
       });
       const data = await res.json();

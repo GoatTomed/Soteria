@@ -167,9 +167,11 @@ function ObfuscateFiles() {
     let obfuscated: string;
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bcedukdmqieckhpsrrcx.supabase.co';
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ||
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjZWR1a2RtcWllY2tocHNycmN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyODE5OTAsImV4cCI6MjEwMDg1Nzk5MH0.k9HcY0d42rP3NoX2sySFCneQcYwCdc29mEG0YnErNRU';
       const res = await fetch(`${supabaseUrl}/functions/v1/wearedevs-obfuscate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anonKey}`, apikey: anonKey },
         body: JSON.stringify({ script: combined }),
       });
       const data = await res.json();
