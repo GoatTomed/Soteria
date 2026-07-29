@@ -1033,7 +1033,6 @@ function OracleKeysAnalytics({ keys, services }: { keys: Key[]; services: Servic
 type Provider = {
   name: 'Linkvertise' | 'Work.ink' | 'LootLabs' | 'Earnpaste';
   desc: string;
-  logo: string;
   docs: string;
   linkLabel: string;
   linkPlaceholder: string;
@@ -1045,7 +1044,6 @@ const MONETIZATION_PROVIDERS: Provider[] = [
   {
     name: 'Earnpaste',
     desc: 'Monetize your gate links with paste-based ads',
-    logo: 'https://yt3.ggpht.com/OV2tg0DmV-NvTvzSr6bxSXMXRG8TMBTOJOzgBfHTzV2x0KPSLDP5yufzsmKEmzfovbSDd3A1=s240-c-k-c0x00ffffff-no-rj',
     docs: 'https://earnpaste.com/',
     linkLabel: 'Earnpaste URL',
     linkPlaceholder: 'https://earnpaste.com/your-paste',
@@ -1059,7 +1057,6 @@ const MONETIZATION_PROVIDERS: Provider[] = [
   {
     name: 'Linkvertise',
     desc: 'Monetize links with interstitial ad pages',
-    logo: 'https://linkvertise.com/assets/img/logo/favicon-32x32.png',
     docs: 'https://linkvertise.com/',
     linkLabel: 'Linkvertise URL',
     linkPlaceholder: 'https://linkvertise.com/your-link',
@@ -1073,7 +1070,6 @@ const MONETIZATION_PROVIDERS: Provider[] = [
   {
     name: 'Work.ink',
     desc: 'Monetize links with shortener-based ads',
-    logo: 'https://work.ink/favicon.ico',
     docs: 'https://work.ink/',
     linkLabel: 'Work.ink URL',
     linkPlaceholder: 'https://work.ink/your-link',
@@ -1087,7 +1083,6 @@ const MONETIZATION_PROVIDERS: Provider[] = [
   {
     name: 'LootLabs',
     desc: 'Monetize links with rewarded ad checkpoints',
-    logo: 'https://lootlabs.gg/favicon.ico',
     docs: 'https://lootlabs.gg/',
     linkLabel: 'LootLabs URL',
     linkPlaceholder: 'https://lootlabs.gg/your-link',
@@ -1101,6 +1096,24 @@ const MONETIZATION_PROVIDERS: Provider[] = [
 ];
 
 type ProviderName = (typeof MONETIZATION_PROVIDERS)[number]['name'];
+
+const PROVIDER_BADGE: Record<ProviderName, { gradient: string; label: string }> = {
+  'Linkvertise': { gradient: 'linear-gradient(135deg, #2D7FF9, #1A5FB4)', label: 'LV' },
+  'Work.ink':    { gradient: 'linear-gradient(135deg, #0EA5E9, #0284C7)', label: 'W' },
+  'LootLabs':    { gradient: 'linear-gradient(135deg, #10B981, #059669)', label: 'LL' },
+  'Earnpaste':   { gradient: 'linear-gradient(135deg, #F59E0B, #D97706)', label: 'EP' },
+};
+
+function ProviderLogo({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
+  const cfg = (PROVIDER_BADGE as Record<string, { gradient: string; label: string }>)[name];
+  const dim = size === 'sm' ? 'h-9 w-9' : 'size-10';
+  if (!cfg) return <div className={`${dim} rounded-lg bg-white/[0.06] flex items-center justify-center shrink-0`}><Link2 className="h-5 w-5 text-white/50" /></div>;
+  return (
+    <div className={`${dim} rounded-lg flex items-center justify-center shrink-0`} style={{ background: cfg.gradient }}>
+      <span className="font-bold text-white text-sm tracking-tight">{cfg.label}</span>
+    </div>
+  );
+}
 
 function OracleMonetization() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
@@ -1176,9 +1189,7 @@ function OracleMonetization() {
                 return (
                   <div key={i.id} className="rounded-xl bg-white/[0.02] flex items-center justify-between p-4 md:p-6">
                     <div className="flex items-center gap-4">
-                      <div className="size-10 rounded-lg bg-white/[0.04] flex items-center justify-center overflow-hidden">
-                        {prov ? <img src={prov.logo} alt={i.provider} className="h-7 w-7 object-contain" /> : <Link2 className="h-5 w-5 text-white/50" />}
-                      </div>
+                      {prov ? <ProviderLogo name={prov.name} /> : <div className="size-10 rounded-lg bg-white/[0.04] flex items-center justify-center"><Link2 className="h-5 w-5 text-white/50" /></div>}
                       <div>
                         <p className="text-sm font-medium text-white">{i.display_name || i.provider}</p>
                         <p className="text-xs text-white/40">{i.provider} · {svcName(i.service_id)} · {i.timer}s timer · Connected {timeAgo(i.created_at)}</p>
@@ -1287,9 +1298,7 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
                       : 'border-white/[0.07] bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04]'
                   }`}
                 >
-                  <div className="h-9 w-9 rounded-lg bg-white/[0.06] flex items-center justify-center overflow-hidden shrink-0">
-                    <img src={p.logo} alt={p.name} className="h-6 w-6 object-contain" />
-                  </div>
+                  <ProviderLogo name={p.name} size="sm" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white">{p.name}</p>
                     <p className="text-xs text-white/40 truncate">{p.desc}</p>
