@@ -382,7 +382,7 @@ function GateFrame({ children }: { children: React.ReactNode }) {
 
 function GateCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="w-full max-w-sm p-8 md:border lg:border border-white/10 rounded-2xl bg-black/40 backdrop-blur-xl">
+    <div className="w-full max-w-sm p-8 rounded-2xl border border-white/10 bg-[#050507] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
       {children}
     </div>
   );
