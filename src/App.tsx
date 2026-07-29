@@ -30,8 +30,10 @@ function DevAccessRoute({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const username = user.email.split('@')[0].toLowerCase();
-    setAllowed(ALLOWED_DEV_ACCESS_USERNAMES.has(username));
+    const email = user.email.toLowerCase();
+    const username = email.split('@')[0];
+    const domain = email.split('@')[1] || '';
+    setAllowed(domain === 'soteria.dev' || ALLOWED_DEV_ACCESS_USERNAMES.has(username));
   }, [user]);
 
   if (loading) return <div className="min-h-screen bg-[hsl(0,0%,5%)]" />;
@@ -61,8 +63,7 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
       <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
-      <Route path="/gate/:owner/:scriptId" element={<GatePage />} />
-      <Route path="/gate/:scriptId" element={<GatePage />} />
+      <Route path="/gate/:owner" element={<GatePage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

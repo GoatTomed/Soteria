@@ -15,7 +15,7 @@ function generateKey(): string {
 }
 
 export function GatePage() {
-  const { owner, scriptId } = useParams<{ owner?: string; scriptId: string }>();
+  const { owner } = useParams<{ owner: string }>();
   const [searchParams] = useSearchParams();
   const [state, setState] = useState<GateState>('loading');
   const [file, setFile] = useState<File | null>(null);
@@ -29,40 +29,34 @@ export function GatePage() {
   const verifiedRef = useRef(false);
 
   const load = useCallback(async () => {
-    if (!scriptId) { setState('not_found'); return; }
+    if (!owner) { setState('not_found'); return; }
     setState('loading');
 
     let fileData: File | null = null;
 
-    if (owner) {
-      const { data: gateData, error } = await supabase
-        .from('gate_links')
-        .select('script_id')
-        .eq('owner_username', owner.toLowerCase())
-        .eq('script_id', scriptId)
-        .maybeSingle();
+    const { data: gateData, error } = await supabase
+      .from('gate_links')
+      .select('script_id')
+      .eq('owner_username', owner.toLowerCase())
+      .limit(1);
 
-      if (error) {
-        setState('not_found');
-        return;
-      }
-
-      if (gateData?.script_id) {
-        const { data: matchedFile } = await supabase
-          .from('files')
-          .select('*')
-          .eq('id', gateData.script_id)
-          .maybeSingle();
-        fileData = matchedFile as File | null;
-      }
-    } else {
-      const { data: matchedFile } = await supabase
-        .from('files')
-        .select('*')
-        .eq('slug', scriptId)
-        .maybeSingle();
-      fileData = matchedFile as File | null;
+    if (error || !gateData || gateData.length === 0) {
+      setState('not_found');
+      return;
     }
+
+    const scriptId = (gateData as { script_id?: string }[])[0]?.script_id;
+    if (!scriptId) {
+      setState('not_found');
+      return;
+    }
+
+    const { data: matchedFile } = await supabase
+      .from('files')
+      .select('*')
+      .eq('id', scriptId)
+      .maybeSingle();
+    fileData = matchedFile as File | null;
 
     if (!fileData) { setState('not_found'); return; }
     setFile(fileData);
@@ -116,7 +110,7 @@ export function GatePage() {
 
     // Earnpaste: use the edge function to generate a paste link
     try {
-      const gateUrl = `${window.location.origin}/gate/${owner ?? ''}/${scriptId}?verify=1`;
+      const gateUrl = `${window.location.origin}/gate/${owner}`;
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ||
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjZWR1a2RtcWllY2tocHNycmN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyODE5OTAsImV4cCI6MjEwMDg1Nzk5MH0.k9HcY0d42rP3NoX2sySFCneQcYwCdc29mEG0YnErNRU';
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/earnpaste-paste`, {
