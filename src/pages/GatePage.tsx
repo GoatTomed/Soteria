@@ -16,10 +16,30 @@ const PROVIDER_LOGOS: Record<string, { gradient: string; label: string }> = {
 };
 
 function ProviderLogo({ provider }: { provider: string }) {
+  const name = provider;
+  const localSrc =
+    name === 'Linkvertise'
+      ? '/logos/linkvertise.svg'
+      : name === 'Work.ink'
+        ? '/logos/workink.png'
+        : name === 'LootLabs'
+          ? '/logos/lootlabs.svg'
+          : name === 'Earnpaste'
+            ? 'https://yt3.ggpht.com/OV2tg0DmV-NvTvzSr6bxSXMXRG8TMBTOJOzgBfHTzV2x0KPSLDP5yufzsmKEmzfovbSDd3A1=s240-c-k-c0x00ffffff-no-rj'
+            : null;
+
+  if (localSrc) {
+    return (
+      <div className="h-9 w-9 rounded-lg overflow-hidden bg-white/[0.06] flex items-center justify-center shrink-0 border border-white/10">
+        <img src={localSrc} alt={name} className="h-full w-full object-contain p-1" />
+      </div>
+    );
+  }
+
   const cfg = PROVIDER_LOGOS[provider] || { gradient: 'linear-gradient(135deg, #475569, #334155)', label: provider.slice(0, 2).toUpperCase() };
   return (
-    <div className="h-8 w-8 rounded-full flex items-center justify-center shrink-0" style={{ background: cfg.gradient }}>
-      <span className="text-[0.625rem] font-semibold uppercase tracking-[0.24em] text-white">{cfg.label}</span>
+    <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 border border-white/10" style={{ background: cfg.gradient }}>
+      <span className="font-bold text-white text-xs tracking-tight">{cfg.label}</span>
     </div>
   );
 }
@@ -368,35 +388,34 @@ export function GatePage() {
 
 function GateFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 overflow-hidden relative bg-[hsl(0,0%,5%)]">
-      {/* Dot grid background */}
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 overflow-hidden relative bg-[#09090b] py-12 px-4">
+      {/* Full viewport Dot grid background */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-40"
+        className="pointer-events-none absolute inset-0 opacity-25"
         style={{
-          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-          maskImage: 'radial-gradient(ellipse at center, black 20%, transparent 70%)',
-          WebkitMaskImage: 'radial-gradient(ellipse at center, black 20%, transparent 70%)',
+          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.15) 1px, transparent 1px)',
+          backgroundSize: '28px 28px',
         }}
       />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[hsl(0,0%,5%)] via-transparent to-[hsl(0,0%,5%)]" />
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[hsl(0,0%,5%)] to-transparent" />
 
-      <Link to="/" className="relative z-10 focus:outline-none">
-        <Logo className="h-12 w-12 text-white" />
+      {/* Ambient background glows */}
+      <div className="pointer-events-none absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-amber-500/10 blur-[130px]" />
+      <div className="pointer-events-none absolute bottom-1/4 left-1/2 -translate-x-1/2 translate-y-1/2 h-[500px] w-[500px] rounded-full bg-blue-500/10 blur-[150px]" />
+
+      <Link to="/" className="relative z-10 focus:outline-none transition-transform hover:scale-105">
+        <Logo className="h-14 w-14 text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.25)]" />
       </Link>
 
-      <div className="relative z-10 w-full px-4 flex justify-center">
+      <div className="relative z-10 w-full max-w-lg px-2 flex justify-center">
         {children}
       </div>
-
     </div>
   );
 }
 
 function GateCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="w-full max-w-sm p-8 rounded-2xl border border-white/10 bg-[#050507] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+    <div className="w-full max-w-lg p-6 sm:p-8 rounded-3xl border border-white/10 bg-[hsl(0,0%,7%)] shadow-[0_24px_80px_rgba(0,0,0,0.7)] backdrop-blur-xl">
       {children}
     </div>
   );

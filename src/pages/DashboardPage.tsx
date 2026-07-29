@@ -42,23 +42,21 @@ export function DashboardPage() {
   const location = useLocation();
   const tutorialMode = new URLSearchParams(location.search).has('tutorial');
   const { tab: urlTab, oracleSub } = pathToTab(location.pathname);
-  const [tab, setTab] = useState(tutorialMode ? 'gate' : urlTab);
+  const [tab, setTab] = useState(urlTab);
   const [showTutorial, setShowTutorial] = useState(tutorialMode);
 
   useEffect(() => {
     const { tab: t } = pathToTab(location.pathname);
-    if (t !== tab && !tutorialMode) setTab(t);
-  }, [location.pathname, tutorialMode, tab]);
+    if (t !== tab) setTab(t);
+  }, [location.pathname, tab]);
 
   useEffect(() => {
     setShowTutorial(tutorialMode);
-    if (tutorialMode && tab !== 'gate') {
-      setTab('gate');
-    }
   }, [tutorialMode]);
 
   const handleTabChange = (newTab: string) => {
     setTab(newTab);
+    if (showTutorial) setShowTutorial(false);
     navigate(tabToPath(newTab));
   };
 
@@ -97,8 +95,8 @@ function formatBytes(bytes: number): string {
 
 function TutorialOverlay({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6">
-      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-950/95 p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-950/95 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex flex-col gap-4">
           <div className="flex items-start justify-between gap-4">
             <div>

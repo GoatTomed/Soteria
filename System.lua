@@ -419,3 +419,5 @@ else
     Overlay.Visible = true
     KeyBox.Text = "Your Key Here!"
 end
+
+repeat task.wait(0.5) until validated
