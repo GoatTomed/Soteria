@@ -8,6 +8,31 @@ import { Logo } from '@/components/Logo';
 
 type GateState = 'loading' | 'ready' | 'not_found' | 'error';
 
+const PROVIDER_LOGOS: Record<string, { gradient: string; label: string }> = {
+  Earnpaste: { gradient: 'linear-gradient(135deg, #F59E0B, #D97706)', label: 'EP' },
+  Linkvertise: { gradient: 'linear-gradient(135deg, #2D7FF9, #1A5FB4)', label: 'LV' },
+  'Work.ink': { gradient: 'linear-gradient(135deg, #0EA5E9, #0284C7)', label: 'W' },
+  LootLabs: { gradient: 'linear-gradient(135deg, #10B981, #059669)', label: 'LL' },
+};
+
+function ProviderLogo({ provider }: { provider: string }) {
+  const cfg = PROVIDER_LOGOS[provider] || { gradient: 'linear-gradient(135deg, #475569, #334155)', label: provider.slice(0, 2).toUpperCase() };
+  return (
+    <div className="h-8 w-8 rounded-full flex items-center justify-center shrink-0" style={{ background: cfg.gradient }}>
+      <span className="text-[0.625rem] font-semibold uppercase tracking-[0.24em] text-white">{cfg.label}</span>
+    </div>
+  );
+}
+
+function formatTimerMinutes(seconds?: number | null) {
+  if (!seconds || seconds <= 0) return null;
+  const minutes = seconds / 60;
+  if (minutes >= 1) {
+    return `${Number(minutes.toFixed(minutes % 1 === 0 ? 0 : 1))} min`;
+  }
+  return `${Number(minutes.toFixed(2))} min`;
+}
+
 function generateKey(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const segment = () => Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
@@ -98,14 +123,14 @@ export function GatePage() {
   };
 
   const claimKey = async () => {
-    if (!allVisited || !file) return;
+    if (!allVisited) return;
     setGenerating(true);
     const key = generateKey();
     const { error } = await supabase.from('keys').insert({
       key_value: key,
       status: 'active',
       hwid: '',
-      note: `Gate key for "${file.name}"`,
+      note: `Gate key for "${owner}"`,
       uses: 0,
     });
     setGenerating(false);
@@ -248,10 +273,20 @@ export function GatePage() {
                     {done ? <Check className="h-4 w-4" /> : <span className="text-xs font-semibold">{idx + 1}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{int.display_name || int.provider} #{idx + 1}</p>
-                    <p className="text-xs text-white/40 truncate">
-                      {done ? 'Checkpoint complete' : `Click to visit ${int.provider}`}
-                    </p>
+                    <div className="flex items-center gap-3">
+                      <ProviderLogo provider={int.provider} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{int.display_name || int.provider} #{idx + 1}</p>
+                        <p className="text-xs text-white/40 truncate">
+                          {done ? 'Checkpoint complete' : `Click to visit ${int.provider}`}
+                        </p>
+                      </div>
+                    </div>
+                    {formatTimerMinutes(int.timer) && (
+                      <p className="text-xs text-white/50 mt-2">
+                        Timer: {formatTimerMinutes(int.timer)}
+                      </p>
+                    )}
                   </div>
                   {!done ? (
                     <button
