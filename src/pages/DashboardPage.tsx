@@ -1043,59 +1043,17 @@ type Provider = {
 
 const MONETIZATION_PROVIDERS: Provider[] = [
   {
-    name: 'Linkvertise',
-    desc: 'Monetize your scripts with link shorteners',
-    logo: 'https://soteria.rip/logos/linkvertise.svg',
-    docs: 'https://linkvertise.com/',
-    linkLabel: 'Publisher ID',
-    linkPlaceholder: 'e.g. 123456',
-    linkType: 'id',
-    setupSteps: [
-      'Log in to linkvertise.com and go to your dashboard.',
-      'Copy your Publisher ID from Settings → Account.',
-      'Paste it in the field above and save.',
-    ],
-  },
-  {
-    name: 'Work.ink',
-    desc: 'Earn revenue from your script downloads',
-    logo: 'https://soteria.rip/logos/workink.png',
-    docs: 'https://work.ink/',
-    linkLabel: 'Workink URL',
-    linkPlaceholder: 'https://work.ink/123/example',
-    linkType: 'url',
-    setupSteps: [
-      'Log in to work.ink and create a new link.',
-      'Copy the full link URL (e.g. https://work.ink/123/example).',
-      'Paste it in the field above and save.',
-    ],
-  },
-  {
-    name: 'LootLabs',
-    desc: 'Gateway monetization for your services',
-    logo: 'https://soteria.rip/logos/lootlabs.svg',
-    docs: 'https://lootlabs.gg/',
-    linkLabel: 'LootLabs Link',
-    linkPlaceholder: 'https://lootlabs.gg/l/example',
-    linkType: 'url',
-    setupSteps: [
-      'Log in to lootlabs.gg and go to your links panel.',
-      'Create a new link and copy its URL.',
-      'Paste it in the field above and save.',
-    ],
-  },
-  {
     name: 'Earnpaste',
     desc: 'Monetize your gate links with paste-based ads',
     logo: 'https://yt3.ggpht.com/OV2tg0DmV-NvTvzSr6bxSXMXRG8TMBTOJOzgBfHTzV2x0KPSLDP5yufzsmKEmzfovbSDd3A1=s240-c-k-c0x00ffffff-no-rj',
     docs: 'https://earnpaste.com/',
-    linkLabel: 'Earnpaste URL',
-    linkPlaceholder: 'https://earnpaste.com/example',
-    linkType: 'url',
+    linkLabel: 'API Key',
+    linkPlaceholder: 'ep_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    linkType: 'id',
     setupSteps: [
-      'Log in to earnpaste.com and create a new paste link.',
-      'Copy the full URL of your paste.',
-      'Paste it in the field above and save.',
+      'Log in to earnpaste.com and go to your dashboard.',
+      'Copy your API key from Settings → API Keys.',
+      'Paste it in the field above and choose your timer.',
     ],
   },
 ];
@@ -1181,7 +1139,7 @@ function OracleMonetization() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-white">{i.display_name || i.provider}</p>
-                        <p className="text-xs text-white/40">{i.provider} · {svcName(i.service_id)} · Connected {timeAgo(i.created_at)}</p>
+                        <p className="text-xs text-white/40">{i.provider} · {svcName(i.service_id)} · {i.timer}s timer · Connected {timeAgo(i.created_at)}</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -1206,7 +1164,8 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
   const [services, setServices] = useState<Service[]>([]);
   const [serviceId, setServiceId] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [linkValue, setLinkValue] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [timer, setTimer] = useState('15');
   const [keyExpiry, setKeyExpiry] = useState('Never');
   const [checkpoints, setCheckpoints] = useState('None');
   const [hwidLock, setHwidLock] = useState('Disabled');
@@ -1228,12 +1187,13 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
     if (!provider) return;
     setError('');
     if (!serviceId) { setError('You must select a service to connect this integration to'); return; }
-    if (!linkValue.trim()) { setError(`${selected?.linkLabel ?? 'Link'} is required`); return; }
+    if (!apiKey.trim()) { setError('API key is required'); return; }
 
     setSaving(true);
     const { error: insErr } = await supabase.from('integrations').insert({
       provider,
-      link_url: linkValue.trim(),
+      api_key: apiKey.trim(),
+      timer: parseInt(timer) || 15,
       display_name: displayName || provider,
       key_expiry_days: keyExpiry === 'Never' ? 0 : parseInt(keyExpiry) || 0,
       checkpoints_config: checkpoints,
@@ -1318,18 +1278,35 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
                 />
               </div>
 
-              {/* Link / ID */}
+              {/* API Key */}
               <div>
                 <label className="block text-xs font-medium text-white/40 mb-1.5">{selected.linkLabel} <span className="text-red-400">*</span></label>
                 <input
-                  value={linkValue}
-                  onChange={e => setLinkValue(e.target.value)}
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
                   placeholder={selected.linkPlaceholder}
-                  className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
+                  className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 font-mono text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
                 />
                 <p className="text-xs text-white/30 mt-1">
-                  {selected.linkType === 'url' ? 'Paste your full link URL here.' : 'Enter your publisher ID from the dashboard.'}
+                  Find your API key in the Earnpaste dashboard under Settings → API Keys.
                 </p>
+              </div>
+
+              {/* Timer dropdown */}
+              <div>
+                <label className="block text-xs font-medium text-white/40 mb-1.5">Timer</label>
+                <select
+                  value={timer}
+                  onChange={e => setTimer(e.target.value)}
+                  style={{ colorScheme: 'dark' }}
+                  className="w-full h-9 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none focus:border-white/20"
+                >
+                  <option value="2">2 seconds</option>
+                  <option value="5">5 seconds</option>
+                  <option value="8">8 seconds</option>
+                  <option value="15">15 seconds</option>
+                </select>
+                <p className="text-xs text-white/30 mt-1">How long users wait on the ad page before they can continue.</p>
               </div>
 
               {/* Checkpoints dropdown */}

@@ -44,7 +44,8 @@ export type Key = {
 export type Integration = {
   id: string;
   provider: string;
-  link_url: string;
+  api_key: string;
+  timer: number;
   status: string;
   created_at: string;
   display_name: string;

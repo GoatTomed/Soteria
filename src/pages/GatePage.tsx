@@ -14,6 +14,12 @@ function generateKey(): string {
   return `${segment()}-${segment()}-${segment()}`;
 }
 
+function parseCheckpointCount(config: string | undefined): number {
+  if (!config || config === 'None') return 0;
+  const match = config.match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
 export function GatePage() {
   const { scriptId } = useParams<{ scriptId: string }>();
   const [searchParams] = useSearchParams();
@@ -52,26 +58,23 @@ export function GatePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const checkpoints = integration?.checkpoints ?? [];
+  const checkpointCount = parseCheckpointCount(integration?.checkpoints_config);
   const isEarnpaste = integration?.provider === 'Earnpaste';
-  const allVisited = checkpoints.length > 0 && visited.size >= checkpoints.length;
+  const allVisited = checkpointCount > 0 && visited.size >= checkpointCount;
 
   // Auto-verify when returning from Earnpaste with ?verify=1
   useEffect(() => {
     if (verifiedRef.current) return;
     if (state !== 'ready' || !file) return;
     const verify = searchParams.get('verify');
-    if (verify === '1' && checkpoints.length > 0) {
+    if (verify === '1' && checkpointCount > 0) {
       verifiedRef.current = true;
-      setVisited(new Set(checkpoints.map((_, i) => i)));
+      setVisited(new Set(Array.from({ length: checkpointCount }, (_, i) => i)));
     }
-  }, [state, file, searchParams, checkpoints.length]);
+  }, [state, file, searchParams, checkpointCount]);
 
   const visitCheckpoint = async (idx: number) => {
-    setVisited(prev => new Set(prev).add(idx));
-
-    if (isEarnpaste && checkpoints[idx]) {
-      // Create Earnpaste paste via edge function (keeps API key server-side)
+    if (isEarnpaste) {
       setPasteLoading(prev => new Set(prev).add(idx));
       try {
         const gateUrl = `${window.location.origin}/gate/${scriptId}?verify=1`;
@@ -84,12 +87,15 @@ export function GatePage() {
         if (data?.url) {
           setPasteUrls(prev => ({ ...prev, [idx]: data.url }));
           window.open(data.url, '_blank');
+          setVisited(prev => new Set(prev).add(idx));
           return;
         }
       } catch {
-        // fall through to direct link
+        // fall through
       }
       setPasteLoading(prev => { const n = new Set(prev); n.delete(idx); return n; });
+    } else {
+      setVisited(prev => new Set(prev).add(idx));
     }
   };
 
@@ -195,37 +201,37 @@ export function GatePage() {
       <GateCard>
         <div className="space-y-2 text-center mb-6">
           <h1 className="text-2xl font-medium text-white">{file?.name ?? 'Gateway'}</h1>
-          <p className="text-sm text-white/40">Complete the {checkpoints.length > 0 ? `checkpoints below` : 'verification'} to get your key.</p>
+          <p className="text-sm text-white/40">Complete the {checkpointCount > 0 ? `checkpoints below` : 'verification'} to get your key.</p>
         </div>
 
         {/* Progress bar */}
-        {checkpoints.length > 0 && (
+        {checkpointCount > 0 && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-white/40">Progress</span>
-              <span className="text-xs text-white/60">{visited.size} / {checkpoints.length}</span>
+              <span className="text-xs text-white/60">{visited.size} / {checkpointCount}</span>
             </div>
             <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
               <div
                 className="h-full bg-brand-400 transition-all duration-500"
-                style={{ width: `${checkpoints.length > 0 ? (visited.size / checkpoints.length) * 100 : 0}%` }}
+                style={{ width: `${checkpointCount > 0 ? (visited.size / checkpointCount) * 100 : 0}%` }}
               />
             </div>
           </div>
         )}
 
         {/* Checkpoint list */}
-        {checkpoints.length === 0 ? (
+        {checkpointCount === 0 ? (
           <div className="py-6 text-center">
             <Sparkles className="mx-auto h-8 w-8 text-brand-300/60 mb-3" />
             <p className="text-sm text-white/50">No checkpoints configured. You can claim your key directly.</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {checkpoints.map((cp, idx) => {
+            {Array.from({ length: checkpointCount }, (_, idx) => {
               const done = visited.has(idx);
               const isLoading = pasteLoading.has(idx);
-              const linkUrl = isEarnpaste ? (pasteUrls[idx] || cp.url) : cp.url;
+              const linkUrl = pasteUrls[idx] || '';
               return (
                 <div
                   key={idx}
@@ -239,8 +245,8 @@ export function GatePage() {
                     {done ? <Check className="h-4 w-4" /> : <span className="text-xs font-semibold">{idx + 1}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{cp.name}</p>
-                    <p className="text-xs text-white/40 truncate">{isEarnpaste && pasteUrls[idx] ? 'Earnpaste link ready' : cp.url}</p>
+                    <p className="text-sm font-medium text-white truncate">Checkpoint {idx + 1}</p>
+                    <p className="text-xs text-white/40 truncate">{done ? 'Earnpaste link ready' : 'Click to generate your Earnpaste link'}</p>
                   </div>
                   {isEarnpaste && !done ? (
                     <button
@@ -251,20 +257,19 @@ export function GatePage() {
                       {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
                       {isLoading ? 'Creating...' : 'Visit'}
                     </button>
-                  ) : (
+                  ) : done && linkUrl ? (
                     <a
                       href={linkUrl}
                       target="_blank"
                       rel="noreferrer"
-                      onClick={() => setVisited(prev => new Set(prev).add(idx))}
-                      className={`shrink-0 h-9 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${
-                        done
-                          ? 'bg-green-500/10 text-green-400'
-                          : 'bg-white text-black hover:bg-white/90'
-                      }`}
+                      className={`shrink-0 h-9 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors bg-green-500/10 text-green-400`}
                     >
-                      {done ? <><Check className="h-3.5 w-3.5" /> Done</> : <><ExternalLink className="h-3.5 w-3.5" /> Visit</>}
+                      <><Check className="h-3.5 w-3.5" /> Done</>
                     </a>
+                  ) : (
+                    <span className="shrink-0 h-9 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 bg-green-500/10 text-green-400">
+                      <Check className="h-3.5 w-3.5" /> Done
+                    </span>
                   )}
                 </div>
               );

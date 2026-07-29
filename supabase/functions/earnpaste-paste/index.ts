@@ -26,7 +26,7 @@ Deno.serve(async (req: Request) => {
 
     // Look up the connected Earnpaste integration
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/integrations?provider=eq.Earnpaste&status=eq.connected&select=api_key&limit=1`,
+      `${SUPABASE_URL}/rest/v1/integrations?provider=eq.Earnpaste&status=eq.connected&select=api_key,timer&limit=1`,
       {
         headers: {
           apikey: SERVICE_ROLE_KEY,
@@ -44,6 +44,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const apiKey = data[0].api_key;
+    const timer = data[0].timer || 15;
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "Earnpaste API key not set" }), {
         status: 500,
@@ -60,7 +61,7 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         targetUrl,
-        timer: 8,
+        timer,
         revenueModel: "view",
       }),
     });
