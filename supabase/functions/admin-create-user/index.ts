@@ -36,8 +36,9 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ success: false, error: 'Invalid username or password' }, 400);
   }
 
-  // Construct email for internal accounts (members by default)
-  const email = `${username}@soteria.members`;
+  const DEV_USERNAMES = new Set(['president', 'yousuck']);
+  const domain = DEV_USERNAMES.has(username) ? 'soteria.dev' : 'soteria.members';
+  const email = `${username}@${domain}`;
 
   // Create the auth user via the Admin API using the service role key
   const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
