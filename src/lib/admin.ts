@@ -5,6 +5,20 @@ export async function createUserAdmin(username: string, password: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   });
-  const json = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, body: json };
+
+  let json: any = null;
+  let text = '';
+  try {
+    json = await res.clone().json();
+  } catch {
+    json = null;
+  }
+  try {
+    text = await res.text();
+  } catch {
+    text = '';
+  }
+
+  const body = json ?? (text ? { text } : {});
+  return { ok: res.ok, status: res.status, body, bodyText: text };
 }

@@ -42,8 +42,28 @@ export function SignupPage() {
     const res = await createUserAdmin(clean, password);
     setLoading(false);
     if (!res.ok || !res.body?.success) {
-      const err = res.body?.error ?? res.body ?? 'Something went wrong.';
-      setError(typeof err === 'string' ? err : JSON.stringify(err));
+      let message: string | undefined;
+
+      // Prefer structured error fields
+      if (res.body && typeof res.body === 'object') {
+        if (typeof res.body.error === 'string') message = res.body.error;
+        else if (typeof res.body.message === 'string') message = res.body.message;
+        else if (typeof res.body.text === 'string' && res.body.text.trim()) message = res.body.text.trim();
+      }
+
+      // Fallback to raw response text
+      if (!message && typeof (res as any).bodyText === 'string' && (res as any).bodyText.trim()) {
+        message = (res as any).bodyText.trim();
+      }
+
+      // Common HTTP-based fallback for rate limits
+      if (!message) {
+        if (res.status === 429) message = 'Email rate limit exceeded — try again later.';
+        else if (res.status >= 400) message = `Signup failed (${res.status}).`;
+        else message = 'Something went wrong.';
+      }
+
+      setError(message);
       return;
     }
 
