@@ -8,7 +8,7 @@ import { generateKeySystemLua } from '@/lib/key-system';
 import {
   Search, ChevronDown, Plus, Link2, FileCode2, Eye, Sparkles,
   ShieldCheck, Trash2, Copy, Check, X, RefreshCw, Power, PowerOff,
-  Lock, Unlock, ExternalLink, XCircle, ClipboardPaste, Loader2,
+  Lock, Unlock, ExternalLink, XCircle, ClipboardPaste, Loader2, BookOpen,
 } from 'lucide-react';
 
 const VALID_TABS = ['obfuscate', 'utilities', 'oracle', 'genesis', 'settings'] as const;
