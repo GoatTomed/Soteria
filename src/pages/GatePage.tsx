@@ -70,6 +70,17 @@ export function GatePage() {
   const visitCheckpoint = async (integration: Integration) => {
     const intId = integration.id;
     setPasteLoading(prev => new Set(prev).add(intId));
+
+    // Non-Earnpaste providers: open the stored link_url directly
+    if (integration.provider !== 'Earnpaste' && integration.link_url) {
+      setPasteUrls(prev => ({ ...prev, [intId]: integration.link_url }));
+      window.open(integration.link_url, '_blank');
+      setVisited(prev => new Set(prev).add(intId));
+      setPasteLoading(prev => { const n = new Set(prev); n.delete(intId); return n; });
+      return;
+    }
+
+    // Earnpaste: use the edge function to generate a paste link
     try {
       const gateUrl = `${window.location.origin}/gate/${scriptId}?verify=1`;
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/earnpaste-paste`, {

@@ -24,11 +24,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Look up the specific integration, or fall back to any connected Earnpaste one
+    // Look up the specific integration, or fall back to any connected one with an API key
     const filter = integrationId
       ? `id=eq.${encodeURIComponent(integrationId)}&status=eq.connected`
-      : `provider=eq.Earnpaste&status=eq.connected`;
-    const select = "api_key,link_url,timer";
+      : `status=eq.connected`;
+    const select = "provider,api_key,link_url,timer";
 
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/integrations?${filter}&select=${select}&limit=1`,

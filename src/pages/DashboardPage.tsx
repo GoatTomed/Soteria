@@ -1047,13 +1047,55 @@ const MONETIZATION_PROVIDERS: Provider[] = [
     desc: 'Monetize your gate links with paste-based ads',
     logo: 'https://yt3.ggpht.com/OV2tg0DmV-NvTvzSr6bxSXMXRG8TMBTOJOzgBfHTzV2x0KPSLDP5yufzsmKEmzfovbSDd3A1=s240-c-k-c0x00ffffff-no-rj',
     docs: 'https://earnpaste.com/',
-    linkLabel: 'API Key',
-    linkPlaceholder: 'ep_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-    linkType: 'id',
+    linkLabel: 'Earnpaste URL',
+    linkPlaceholder: 'https://earnpaste.com/your-paste',
+    linkType: 'url',
     setupSteps: [
       'Log in to earnpaste.com and go to your dashboard.',
       'Copy your API key from Settings → API Keys.',
       'Paste it in the field above and choose your timer.',
+    ],
+  },
+  {
+    name: 'Linkvertise',
+    desc: 'Monetize links with interstitial ad pages',
+    logo: 'https://linkvertise.com/assets/img/logo/favicon-32x32.png',
+    docs: 'https://linkvertise.com/',
+    linkLabel: 'Linkvertise URL',
+    linkPlaceholder: 'https://linkvertise.com/your-link',
+    linkType: 'url',
+    setupSteps: [
+      'Log in to linkvertise.com and create a new link.',
+      'Copy the full Linkvertise URL from your dashboard.',
+      'Paste it in the field above.',
+    ],
+  },
+  {
+    name: 'Work.ink',
+    desc: 'Monetize links with shortener-based ads',
+    logo: 'https://work.ink/favicon.ico',
+    docs: 'https://work.ink/',
+    linkLabel: 'Work.ink URL',
+    linkPlaceholder: 'https://work.ink/your-link',
+    linkType: 'url',
+    setupSteps: [
+      'Log in to work.ink and create a new shortened link.',
+      'Copy the full Work.ink URL from your dashboard.',
+      'Paste it in the field above.',
+    ],
+  },
+  {
+    name: 'LootLabs',
+    desc: 'Monetize links with rewarded ad checkpoints',
+    logo: 'https://lootlabs.gg/favicon.ico',
+    docs: 'https://lootlabs.gg/',
+    linkLabel: 'LootLabs URL',
+    linkPlaceholder: 'https://lootlabs.gg/your-link',
+    linkType: 'url',
+    setupSteps: [
+      'Log in to lootlabs.gg and create a new link.',
+      'Copy the full LootLabs URL from your dashboard.',
+      'Paste it in the field above.',
     ],
   },
 ];
@@ -1188,7 +1230,12 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
     if (!provider) return;
     setError('');
     if (!serviceId) { setError('You must select a service to connect this integration to'); return; }
-    if (!earnpasteUrl.trim() && !apiKey.trim()) { setError('Provide either an Earnpaste URL or an API key'); return; }
+    const isEarnpaste = provider === 'Earnpaste';
+    if (isEarnpaste) {
+      if (!earnpasteUrl.trim() && !apiKey.trim()) { setError('Provide either an Earnpaste URL or an API key'); return; }
+    } else {
+      if (!earnpasteUrl.trim()) { setError('A link URL is required for this provider'); return; }
+    }
 
     setSaving(true);
     const { error: insErr } = await supabase.from('integrations').insert({
@@ -1280,38 +1327,39 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
                 />
               </div>
 
-              {/* Earnpaste URL */}
+              {/* Link URL */}
               <div>
-                <label className="block text-xs font-medium text-white/40 mb-1.5">Earnpaste URL <span className="text-white/20">*</span></label>
+                <label className="block text-xs font-medium text-white/40 mb-1.5">{selected.linkLabel} <span className="text-red-400">*</span></label>
                 <input
                   value={earnpasteUrl}
                   onChange={e => setEarnpasteUrl(e.target.value)}
-                  placeholder="https://earnpaste.com/your-paste"
+                  placeholder={selected.linkPlaceholder}
                   className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
                 />
-                <p className="text-xs text-white/30 mt-1">Paste your full Earnpaste link URL here.</p>
+                <p className="text-xs text-white/30 mt-1">Paste your full {selected.name} link URL here.</p>
               </div>
 
-              {/* OR divider */}
-              <div className="flex items-center gap-3 py-1">
-                <div className="h-px flex-1 bg-white/10" />
-                <span className="text-xs font-medium text-white/30 uppercase tracking-wider">OR</span>
-                <div className="h-px flex-1 bg-white/10" />
-              </div>
+              {/* OR divider + API key — only for Earnpaste */}
+              {provider === 'Earnpaste' && (<>
+                <div className="flex items-center gap-3 py-1">
+                  <div className="h-px flex-1 bg-white/10" />
+                  <span className="text-xs font-medium text-white/30 uppercase tracking-wider">OR</span>
+                  <div className="h-px flex-1 bg-white/10" />
+                </div>
 
-              {/* Your API key */}
-              <div>
-                <label className="block text-xs font-medium text-white/40 mb-1.5">Your API Key</label>
-                <input
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  placeholder="ep_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                  className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 font-mono text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
-                />
-                <p className="text-xs text-white/30 mt-1">
-                  Find your API key in the Earnpaste dashboard under Settings → API Keys.
-                </p>
-              </div>
+                <div>
+                  <label className="block text-xs font-medium text-white/40 mb-1.5">Your API Key</label>
+                  <input
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder="ep_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                    className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 font-mono text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
+                  />
+                  <p className="text-xs text-white/30 mt-1">
+                    Find your API key in the Earnpaste dashboard under Settings → API Keys.
+                  </p>
+                </div>
+              </>)}
 
               {/* Timer dropdown */}
               <div>
