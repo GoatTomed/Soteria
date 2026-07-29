@@ -1164,6 +1164,7 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
   const [services, setServices] = useState<Service[]>([]);
   const [serviceId, setServiceId] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [earnpasteUrl, setEarnpasteUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [timer, setTimer] = useState('15');
   const [keyExpiry, setKeyExpiry] = useState('Never');
@@ -1187,11 +1188,12 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
     if (!provider) return;
     setError('');
     if (!serviceId) { setError('You must select a service to connect this integration to'); return; }
-    if (!apiKey.trim()) { setError('API key is required'); return; }
+    if (!earnpasteUrl.trim() && !apiKey.trim()) { setError('Provide either an Earnpaste URL or an API key'); return; }
 
     setSaving(true);
     const { error: insErr } = await supabase.from('integrations').insert({
       provider,
+      link_url: earnpasteUrl.trim(),
       api_key: apiKey.trim(),
       timer: parseInt(timer) || 15,
       display_name: displayName || provider,
@@ -1278,13 +1280,32 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
                 />
               </div>
 
-              {/* API Key */}
+              {/* Earnpaste URL */}
               <div>
-                <label className="block text-xs font-medium text-white/40 mb-1.5">{selected.linkLabel} <span className="text-red-400">*</span></label>
+                <label className="block text-xs font-medium text-white/40 mb-1.5">Earnpaste URL <span className="text-white/20">*</span></label>
+                <input
+                  value={earnpasteUrl}
+                  onChange={e => setEarnpasteUrl(e.target.value)}
+                  placeholder="https://earnpaste.com/your-paste"
+                  className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
+                />
+                <p className="text-xs text-white/30 mt-1">Paste your full Earnpaste link URL here.</p>
+              </div>
+
+              {/* OR divider */}
+              <div className="flex items-center gap-3 py-1">
+                <div className="h-px flex-1 bg-white/10" />
+                <span className="text-xs font-medium text-white/30 uppercase tracking-wider">OR</span>
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
+
+              {/* Your API key */}
+              <div>
+                <label className="block text-xs font-medium text-white/40 mb-1.5">Your API Key</label>
                 <input
                   value={apiKey}
                   onChange={e => setApiKey(e.target.value)}
-                  placeholder={selected.linkPlaceholder}
+                  placeholder="ep_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                   className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 font-mono text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
                 />
                 <p className="text-xs text-white/30 mt-1">

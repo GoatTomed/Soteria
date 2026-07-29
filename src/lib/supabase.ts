@@ -45,6 +45,7 @@ export type Integration = {
   id: string;
   provider: string;
   api_key: string;
+  link_url: string;
   timer: number;
   status: string;
   created_at: string;

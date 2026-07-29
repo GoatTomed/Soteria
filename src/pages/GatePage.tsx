@@ -14,24 +14,18 @@ function generateKey(): string {
   return `${segment()}-${segment()}-${segment()}`;
 }
 
-function parseCheckpointCount(config: string | undefined): number {
-  if (!config || config === 'None') return 0;
-  const match = config.match(/(\d+)/);
-  return match ? parseInt(match[1], 10) : 0;
-}
-
 export function GatePage() {
   const { scriptId } = useParams<{ scriptId: string }>();
   const [searchParams] = useSearchParams();
   const [state, setState] = useState<GateState>('loading');
   const [file, setFile] = useState<File | null>(null);
-  const [integration, setIntegration] = useState<Integration | null>(null);
-  const [visited, setVisited] = useState<Set<number>>(new Set());
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [visited, setVisited] = useState<Set<string>>(new Set());
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [pasteUrls, setPasteUrls] = useState<Record<number, string>>({});
-  const [pasteLoading, setPasteLoading] = useState<Set<number>>(new Set());
+  const [pasteUrls, setPasteUrls] = useState<Record<string, string>>({});
+  const [pasteLoading, setPasteLoading] = useState<Set<string>>(new Set());
   const verifiedRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -45,58 +39,55 @@ export function GatePage() {
     if (!fileData) { setState('not_found'); return; }
     setFile(fileData as File);
 
+    // Load ALL connected integrations for this file's service
     const { data: intData } = await supabase
       .from('integrations')
       .select('*')
       .eq('status', 'connected')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    setIntegration((intData as Integration) ?? null);
+      .order('created_at', { ascending: true });
+    const all = (intData as Integration[]) ?? [];
+    // Filter to integrations matching this file's service_id (or global if service_id is null)
+    const filtered = all.filter(i => !i.service_id || i.service_id === (fileData as File).service_id);
+    setIntegrations(filtered);
     setState('ready');
   }, [scriptId]);
 
   useEffect(() => { load(); }, [load]);
 
-  const checkpointCount = parseCheckpointCount(integration?.checkpoints_config);
-  const isEarnpaste = integration?.provider === 'Earnpaste';
-  const allVisited = checkpointCount > 0 && visited.size >= checkpointCount;
+  const allVisited = integrations.length > 0 && visited.size >= integrations.length;
 
   // Auto-verify when returning from Earnpaste with ?verify=1
   useEffect(() => {
     if (verifiedRef.current) return;
     if (state !== 'ready' || !file) return;
     const verify = searchParams.get('verify');
-    if (verify === '1' && checkpointCount > 0) {
+    if (verify === '1' && integrations.length > 0) {
       verifiedRef.current = true;
-      setVisited(new Set(Array.from({ length: checkpointCount }, (_, i) => i)));
+      setVisited(new Set(integrations.map(i => i.id)));
     }
-  }, [state, file, searchParams, checkpointCount]);
+  }, [state, file, searchParams, integrations]);
 
-  const visitCheckpoint = async (idx: number) => {
-    if (isEarnpaste) {
-      setPasteLoading(prev => new Set(prev).add(idx));
-      try {
-        const gateUrl = `${window.location.origin}/gate/${scriptId}?verify=1`;
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/earnpaste-paste`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetUrl: gateUrl }),
-        });
-        const data = await res.json();
-        if (data?.url) {
-          setPasteUrls(prev => ({ ...prev, [idx]: data.url }));
-          window.open(data.url, '_blank');
-          setVisited(prev => new Set(prev).add(idx));
-          return;
-        }
-      } catch {
-        // fall through
+  const visitCheckpoint = async (integration: Integration) => {
+    const intId = integration.id;
+    setPasteLoading(prev => new Set(prev).add(intId));
+    try {
+      const gateUrl = `${window.location.origin}/gate/${scriptId}?verify=1`;
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/earnpaste-paste`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUrl: gateUrl, integrationId: intId }),
+      });
+      const data = await res.json();
+      if (data?.url) {
+        setPasteUrls(prev => ({ ...prev, [intId]: data.url }));
+        window.open(data.url, '_blank');
+        setVisited(prev => new Set(prev).add(intId));
+        return;
       }
-      setPasteLoading(prev => { const n = new Set(prev); n.delete(idx); return n; });
-    } else {
-      setVisited(prev => new Set(prev).add(idx));
+    } catch {
+      // fall through
     }
+    setPasteLoading(prev => { const n = new Set(prev); n.delete(intId); return n; });
   };
 
   const claimKey = async () => {
@@ -169,6 +160,7 @@ export function GatePage() {
 
   /* ---------- Key revealed ---------- */
   if (generatedKey) {
+    const firstInt = integrations[0];
     return <GateFrame>
       <GateCard>
         <div className="mx-auto h-14 w-14 rounded-2xl bg-green-500/10 flex items-center justify-center mb-4">
@@ -189,7 +181,7 @@ export function GatePage() {
           </div>
         </div>
         <p className="mt-4 text-xs text-white/30">
-          {integration?.key_expiry_days ? `Expires in ${integration.key_expiry_days} day${integration.key_expiry_days !== 1 ? 's' : ''}.` : 'This key does not expire.'}
+          {firstInt?.key_expiry_days ? `Expires in ${firstInt.key_expiry_days} day${firstInt.key_expiry_days !== 1 ? 's' : ''}.` : 'This key does not expire.'}
         </p>
       </GateCard>
     </GateFrame>;
@@ -201,40 +193,44 @@ export function GatePage() {
       <GateCard>
         <div className="space-y-2 text-center mb-6">
           <h1 className="text-2xl font-medium text-white">{file?.name ?? 'Gateway'}</h1>
-          <p className="text-sm text-white/40">Complete the {checkpointCount > 0 ? `checkpoints below` : 'verification'} to get your key.</p>
+          <p className="text-sm text-white/40">
+            {integrations.length > 0
+              ? `Complete all ${integrations.length} checkpoint${integrations.length !== 1 ? 's' : ''} below to get your key.`
+              : 'Complete the verification to get your key.'}
+          </p>
         </div>
 
         {/* Progress bar */}
-        {checkpointCount > 0 && (
+        {integrations.length > 0 && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-white/40">Progress</span>
-              <span className="text-xs text-white/60">{visited.size} / {checkpointCount}</span>
+              <span className="text-xs text-white/60">{visited.size} / {integrations.length}</span>
             </div>
             <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
               <div
                 className="h-full bg-brand-400 transition-all duration-500"
-                style={{ width: `${checkpointCount > 0 ? (visited.size / checkpointCount) * 100 : 0}%` }}
+                style={{ width: `${integrations.length > 0 ? (visited.size / integrations.length) * 100 : 0}%` }}
               />
             </div>
           </div>
         )}
 
-        {/* Checkpoint list */}
-        {checkpointCount === 0 ? (
+        {/* Checkpoint list — one per integration */}
+        {integrations.length === 0 ? (
           <div className="py-6 text-center">
             <Sparkles className="mx-auto h-8 w-8 text-brand-300/60 mb-3" />
             <p className="text-sm text-white/50">No checkpoints configured. You can claim your key directly.</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {Array.from({ length: checkpointCount }, (_, idx) => {
-              const done = visited.has(idx);
-              const isLoading = pasteLoading.has(idx);
-              const linkUrl = pasteUrls[idx] || '';
+            {integrations.map((int, idx) => {
+              const done = visited.has(int.id);
+              const isLoading = pasteLoading.has(int.id);
+              const linkUrl = pasteUrls[int.id] || '';
               return (
                 <div
-                  key={idx}
+                  key={int.id}
                   className={`flex items-center gap-3 rounded-xl border p-4 transition-colors ${
                     done ? 'border-green-500/20 bg-green-500/[0.04]' : 'border-white/[0.07] bg-white/[0.02]'
                   }`}
@@ -245,26 +241,28 @@ export function GatePage() {
                     {done ? <Check className="h-4 w-4" /> : <span className="text-xs font-semibold">{idx + 1}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">Checkpoint {idx + 1}</p>
-                    <p className="text-xs text-white/40 truncate">{done ? 'Earnpaste link ready' : 'Click to generate your Earnpaste link'}</p>
+                    <p className="text-sm font-medium text-white truncate">{int.display_name || int.provider} #{idx + 1}</p>
+                    <p className="text-xs text-white/40 truncate">
+                      {done ? 'Checkpoint complete' : `Click to visit ${int.provider}`}
+                    </p>
                   </div>
-                  {isEarnpaste && !done ? (
+                  {!done ? (
                     <button
-                      onClick={() => visitCheckpoint(idx)}
+                      onClick={() => visitCheckpoint(int)}
                       disabled={isLoading}
                       className="shrink-0 h-9 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors bg-white text-black hover:bg-white/90 disabled:opacity-50"
                     >
                       {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
                       {isLoading ? 'Creating...' : 'Visit'}
                     </button>
-                  ) : done && linkUrl ? (
+                  ) : linkUrl ? (
                     <a
                       href={linkUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className={`shrink-0 h-9 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors bg-green-500/10 text-green-400`}
+                      className="shrink-0 h-9 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors bg-green-500/10 text-green-400"
                     >
-                      <><Check className="h-3.5 w-3.5" /> Done</>
+                      <Check className="h-3.5 w-3.5" /> Done
                     </a>
                   ) : (
                     <span className="shrink-0 h-9 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 bg-green-500/10 text-green-400">
@@ -292,9 +290,9 @@ export function GatePage() {
           )}
         </button>
 
-        {integration && (
+        {integrations.length > 0 && (
           <p className="mt-4 text-center text-xs text-white/30">
-            Powered by {integration.display_name || integration.provider}
+            Powered by {integrations.map(i => i.display_name || i.provider).join(', ')}
           </p>
         )}
       </GateCard>
