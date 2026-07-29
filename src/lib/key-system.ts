@@ -1,11 +1,14 @@
 /**
- * Generates the Soteria Lua key system code for a given file slug.
+ * Generates the Soteria Lua key system code for a given owner username and script id.
  * The key system shows a draggable GUI card, validates the key against
  * the Soteria verify-key edge function, and saves/restores the key locally.
  */
-export function generateKeySystemLua(slug: string): string {
-  const verifyUrl = `https://qqnnaknwszrigxwrlvxd.supabase.co/functions/v1/verify-key`;
-  const gateUrl = `https://yousoteria.vercel.app/gate/${slug}`;
+export function generateKeySystemLua(ownerUsername: string | null, scriptId: string): string {
+  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || 'https://bcedukdmqieckhpsrrcx.supabase.co').replace(/\/$/, '');
+  const verifyUrl = `${supabaseUrl}/functions/v1/verify-gate`;
+  const siteBase = (import.meta.env.VITE_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173')).replace(/\/$/, '');
+  const safeOwner = (ownerUsername || '').trim().toLowerCase();
+  const gateUrl = safeOwner ? `${siteBase}/gate/${encodeURIComponent(safeOwner)}/${scriptId}` : `${siteBase}/gate/${scriptId}`;
   const keyFile = "soteria_key.txt";
 
   return `-- Soteria Key System

@@ -160,7 +160,8 @@ function ObfuscateFiles() {
   const obfuscateFile = async (file: File) => {
     setObfuscating(file.id);
     const original = file.content || '';
-    const keySystem = generateKeySystemLua(file.slug);
+    const owner = 'soteria';
+    const keySystem = generateKeySystemLua(owner, file.id);
     const combined = keySystem + '\n' + original;
 
     let obfuscated: string;
@@ -1105,8 +1106,25 @@ const PROVIDER_BADGE: Record<ProviderName, { gradient: string; label: string }> 
 };
 
 function ProviderLogo({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
-  const cfg = (PROVIDER_BADGE as Record<string, { gradient: string; label: string }>)[name];
   const dim = size === 'sm' ? 'h-9 w-9' : 'size-10';
+  const localSrc =
+    name === 'Linkvertise'
+      ? '/logos/linkvertise.svg'
+      : name === 'Work.ink'
+        ? '/logos/workink.png'
+        : name === 'LootLabs'
+          ? '/logos/lootlabs.svg'
+          : null;
+
+  if (localSrc) {
+    return (
+      <div className={`${dim} rounded-lg overflow-hidden bg-white/[0.06] flex items-center justify-center shrink-0`}>
+        <img src={localSrc} alt={name} className="h-full w-full object-contain p-1.5" />
+      </div>
+    );
+  }
+
+  const cfg = (PROVIDER_BADGE as Record<string, { gradient: string; label: string }>)[name];
   if (!cfg) return <div className={`${dim} rounded-lg bg-white/[0.06] flex items-center justify-center shrink-0`}><Link2 className="h-5 w-5 text-white/50" /></div>;
   return (
     <div className={`${dim} rounded-lg flex items-center justify-center shrink-0`} style={{ background: cfg.gradient }}>
@@ -1227,13 +1245,19 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
   const [showSetup, setShowSetup] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [selectedScripts, setSelectedScripts] = useState<string[]>([]);
+  const [scripts, setScripts] = useState<Script[]>([]);
 
   const selected = MONETIZATION_PROVIDERS.find(p => p.name === provider);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('services').select('*').order('name');
-      setServices((data as Service[]) ?? []);
+      const [svcRes, scriptRes] = await Promise.all([
+        supabase.from('services').select('*').order('name'),
+        supabase.from('scripts').select('*').order('name'),
+      ]);
+      setServices((svcRes.data as Service[]) ?? []);
+      setScripts((scriptRes.data as Script[]) ?? []);
     })();
   }, []);
 
@@ -1249,7 +1273,7 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
     }
 
     setSaving(true);
-    const { error: insErr } = await supabase.from('integrations').insert({
+    const { data: integrationData, error: insErr } = await supabase.from('integrations').insert({
       provider,
       link_url: earnpasteUrl.trim(),
       api_key: apiKey.trim(),
@@ -1261,9 +1285,21 @@ function NewIntegrationModal({ onClose }: { onClose: () => void }) {
       uid_lock: uidLock !== 'Disabled',
       service_id: serviceId,
       status: 'connected',
-    });
+    }).select('*').maybeSingle();
     setSaving(false);
-    if (insErr) { setError(insErr.message); return; }
+    if (insErr || !integrationData) { setError(insErr?.message || 'Could not create integration'); return; }
+
+    if (selectedScripts.length > 0) {
+      const rows = selectedScripts.map(scriptId => ({
+        integration_id: integrationData.id,
+        script_id: scriptId,
+      }));
+      const { error: linkErr } = await supabase.from('integration_script_links').insert(rows);
+      if (linkErr) {
+        setError(linkErr.message);
+        return;
+      }
+    }
     onClose();
   };
 

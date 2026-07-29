@@ -57,6 +57,14 @@ export type Integration = {
   service_id: string | null;
 };
 
+export type GateLink = {
+  id: string;
+  owner_username: string;
+  script_id: string;
+  integration_id: string | null;
+  created_at: string;
+};
+
 export type File = {
   id: string;
   name: string;

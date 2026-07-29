@@ -15,7 +15,7 @@ function generateKey(): string {
 }
 
 export function GatePage() {
-  const { scriptId } = useParams<{ scriptId: string }>();
+  const { owner, scriptId } = useParams<{ owner?: string; scriptId: string }>();
   const [searchParams] = useSearchParams();
   const [state, setState] = useState<GateState>('loading');
   const [file, setFile] = useState<File | null>(null);
@@ -31,26 +31,52 @@ export function GatePage() {
   const load = useCallback(async () => {
     if (!scriptId) { setState('not_found'); return; }
     setState('loading');
-    const { data: fileData } = await supabase
-      .from('files')
-      .select('*')
-      .eq('slug', scriptId)
-      .maybeSingle();
-    if (!fileData) { setState('not_found'); return; }
-    setFile(fileData as File);
 
-    // Load ALL connected integrations for this file's service
+    let fileData: File | null = null;
+
+    if (owner) {
+      const { data: gateData, error } = await supabase
+        .from('gate_links')
+        .select('script_id')
+        .eq('owner_username', owner.toLowerCase())
+        .eq('script_id', scriptId)
+        .maybeSingle();
+
+      if (error) {
+        setState('not_found');
+        return;
+      }
+
+      if (gateData?.script_id) {
+        const { data: matchedFile } = await supabase
+          .from('files')
+          .select('*')
+          .eq('id', gateData.script_id)
+          .maybeSingle();
+        fileData = matchedFile as File | null;
+      }
+    } else {
+      const { data: matchedFile } = await supabase
+        .from('files')
+        .select('*')
+        .eq('slug', scriptId)
+        .maybeSingle();
+      fileData = matchedFile as File | null;
+    }
+
+    if (!fileData) { setState('not_found'); return; }
+    setFile(fileData);
+
     const { data: intData } = await supabase
       .from('integrations')
       .select('*')
       .eq('status', 'connected')
       .order('created_at', { ascending: true });
     const all = (intData as Integration[]) ?? [];
-    // Filter to integrations matching this file's service_id (or global if service_id is null)
-    const filtered = all.filter(i => !i.service_id || i.service_id === (fileData as File).service_id);
+    const filtered = all.filter(i => !i.service_id || i.service_id === fileData.service_id);
     setIntegrations(filtered);
     setState('ready');
-  }, [scriptId]);
+  }, [owner, scriptId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -82,7 +108,7 @@ export function GatePage() {
 
     // Earnpaste: use the edge function to generate a paste link
     try {
-      const gateUrl = `${window.location.origin}/gate/${scriptId}?verify=1`;
+      const gateUrl = `${window.location.origin}/gate/${owner ?? ''}/${scriptId}?verify=1`;
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/earnpaste-paste`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

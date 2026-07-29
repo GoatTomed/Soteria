@@ -37,6 +37,7 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
       <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
+      <Route path="/gate/:owner/:scriptId" element={<GatePage />} />
       <Route path="/gate/:scriptId" element={<GatePage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

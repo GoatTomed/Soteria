@@ -95,6 +95,22 @@ create table if not exists execution_logs (
   created_at timestamptz not null default now()
 );
 
+create table if not exists gate_links (
+  id uuid primary key default gen_random_uuid(),
+  owner_username text not null,
+  script_id uuid not null references files(id) on delete cascade,
+  integration_id uuid references integrations(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists integration_script_links (
+  id uuid primary key default gen_random_uuid(),
+  integration_id uuid not null references integrations(id) on delete cascade,
+  script_id uuid not null references files(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(integration_id, script_id)
+);
+
 create index if not exists idx_execution_logs_created_at on execution_logs(created_at);
 create index if not exists idx_execution_logs_file_id on execution_logs(file_id);
 create index if not exists idx_execution_logs_service_id on execution_logs(service_id);
