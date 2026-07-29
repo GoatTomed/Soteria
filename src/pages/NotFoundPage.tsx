@@ -1,169 +1,154 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Home, Terminal, ShieldAlert, Bug, Lock, Cpu } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Home, ArrowRight } from 'lucide-react';
 
-const GLITCH_CHARS = '!<>-_\\/[]{}—=+*^?#01';
-
-function useGlitchText(text: string, active: boolean, intervalMs = 50): string {
-  const [display, setDisplay] = useState(text);
-  useEffect(() => {
-    if (!active) {
-      setDisplay(text);
-      return;
-    }
-    let frame = 0;
-    const totalFrames = text.length * 2;
-    const id = setInterval(() => {
-      if (frame >= totalFrames) {
-        setDisplay(text);
-        clearInterval(id);
-        return;
-      }
-      const progress = frame / totalFrames;
-      const revealCount = Math.floor(progress * text.length);
-      let out = '';
-      for (let i = 0; i < text.length; i++) {
-        if (i < revealCount) {
-          out += text[i];
-        } else if (text[i] === ' ') {
-          out += ' ';
-        } else {
-          out += GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
-        }
-      }
-      setDisplay(out);
-      frame++;
-    }, intervalMs);
-    return () => clearInterval(id);
-  }, [text, active, intervalMs]);
-  return display;
-}
-
-function Scanline() {
+function AnimatedBlob({ style }: { style: React.CSSProperties }) {
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute inset-x-0 h-px bg-brand-400/60 animate-scanline" />
-      <div className="absolute inset-0 bg-scanlines opacity-[0.04]" />
-    </div>
+    <div
+      className="pointer-events-none absolute rounded-full bg-white/5 shadow-[0_0_120px_rgba(56,189,248,0.18)]"
+      style={style}
+    />
   );
 }
 
-function TerminalLine({ prompt, children, delay }: { prompt: string; children: React.ReactNode; delay: number }) {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const id = setTimeout(() => setVisible(true), delay);
-    return () => clearTimeout(id);
-  }, [delay]);
+function InteractiveCard({ path }: { path: string }) {
   return (
-    <div
-      className={`flex items-start gap-2 font-mono text-[13px] leading-relaxed transition-opacity duration-300 ${
-        visible ? 'opacity-100' : 'opacity-0'
-      }`}
-    >
-      <span className="select-none text-success/70">{prompt}</span>
-      <span className="text-ink-300">{children}</span>
+    <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/85 px-8 py-10 shadow-[0_40px_120px_rgba(15,23,42,0.45)] backdrop-blur-xl">
+      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-sky-500/10 to-transparent" />
+      <div className="relative">
+        <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-slate-500">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-cyan-400" />
+          route analyzer
+        </div>
+        <p className="text-sm text-slate-400">
+          No matching route was found for <span className="text-white">{path}</span>. Try returning to the dashboard or explore unobfuscated scripts.
+        </p>
+
+        <div className="mt-8 rounded-3xl border border-white/5 bg-slate-900/90 p-5 text-left text-sm text-slate-300 shadow-inner shadow-slate-950/40">
+          <div className="mb-3 text-xs uppercase tracking-[0.3em] text-slate-500">trace log</div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-slate-400">
+              <span className="font-mono text-slate-400">$</span>
+              <span>trace --route <span className="text-white">{path}</span></span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-400">
+              <span className="font-mono text-slate-400">></span>
+              <span>Scanning route registry...</span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-300">
+              <span className="font-mono text-rose-400">!</span>
+              <span>No matching handler registered</span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-400">
+              <span className="font-mono text-slate-400">></span>
+              <span>found 0 routes · status 404</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
 export function NotFoundPage() {
-  const [glitching, setGlitching] = useState(true);
-  const glitched = useGlitchText('404', glitching, 60);
+  const location = useLocation();
+  const [pointer, setPointer] = useState({ x: 0, y: 0 });
 
-  useEffect(() => {
-    const id = setTimeout(() => setGlitching(false), 2500);
-    return () => clearTimeout(id);
-  }, []);
+  const handleMouseMove = (event: React.MouseEvent<HTMLElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+    setPointer({ x, y });
+  };
+
+  const layers = useMemo(
+    () => [
+      { size: 260, opacity: 0.18, factor: 18, bg: 'bg-cyan-500/15' },
+      { size: 180, opacity: 0.1, factor: 12, bg: 'bg-fuchsia-500/15' },
+      { size: 120, opacity: 0.08, factor: 8, bg: 'bg-blue-400/15' },
+    ],
+    []
+  );
 
   return (
-    <section className="relative flex min-h-[calc(100vh-4rem)] items-center justify-center overflow-hidden">
-      {/* Background layers */}
-      <div className="pointer-events-none absolute inset-0 bg-grid-faint [background-size:44px_44px] opacity-30" />
-      <div className="pointer-events-none absolute inset-0 bg-radial-fade opacity-60" />
-      <Scanline />
+    <section
+      className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-slate-950 text-white"
+      onMouseMove={handleMouseMove}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.2),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(168,85,247,0.18),_transparent_24%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.92),rgba(15,23,42,0.95))]" />
+      <div className="pointer-events-none absolute inset-0 bg-grid-faint opacity-20" />
 
-      {/* Floating warning icons */}
-      <div className="pointer-events-none absolute inset-0 select-none">
-        <ShieldAlert className="absolute left-[12%] top-[18%] h-10 w-10 text-danger/15 animate-float-slow" />
-        <Bug className="absolute right-[14%] top-[22%] h-8 w-8 text-warning/15 animate-float-slower" />
-        <Lock className="absolute left-[18%] bottom-[20%] h-9 w-9 text-brand-400/15 animate-float-slow" />
-        <Cpu className="absolute right-[16%] bottom-[18%] h-10 w-10 text-accent-400/15 animate-float-slower" />
-      </div>
+      {layers.map((layer, index) => (
+        <AnimatedBlob
+          key={index}
+          style={{
+            width: layer.size,
+            height: layer.size,
+            opacity: layer.opacity,
+            borderRadius: '9999px',
+            transform: `translate3d(${pointer.x * layer.factor}px, ${pointer.y * layer.factor}px, 0)`,
+            top: `${20 + index * 18}%`,
+            left: `${10 + index * 25}%`,
+            background: index === 0 ? 'rgba(56,189,248,0.14)' : index === 1 ? 'rgba(168,85,247,0.12)' : 'rgba(56,189,248,0.08)',
+          }}
+        />
+      ))}
 
-      <div className="container-page relative z-10 py-20">
-        <div className="mx-auto max-w-2xl text-center">
-          {/* Glitch 404 */}
-          <div className="relative inline-block">
-            <h1
-              className="select-none font-mono text-7xl font-bold tracking-tighter text-white sm:text-8xl lg:text-9xl"
-              style={{ textShadow: glitching ? '2px 0 #ef4444, -2px 0 #22d3ee' : 'none' }}
-            >
-              {glitched}
+      <div className="relative z-10 container-page mx-auto flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center px-4 py-20 sm:px-6 lg:px-8">
+        <div className="relative max-w-5xl">
+          <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/5 to-transparent" />
+
+          <div className="mb-10 text-center">
+            <p className="text-sm uppercase tracking-[0.35em] text-slate-500">404 - page not found</p>
+            <h1 className="mt-6 text-[clamp(4rem,12vw,9rem)] font-black leading-none text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-blue-400">
+              404
             </h1>
-            {glitching && (
-              <h1 className="absolute inset-0 select-none font-mono text-7xl font-bold tracking-tighter text-brand-400/30 sm:text-8xl lg:text-9xl animate-glitch-offset">
-                {glitched}
-              </h1>
-            )}
+            <p className="mx-auto mt-4 max-w-2xl text-base text-slate-300 sm:text-lg">
+              The page <span className="font-semibold text-white">{location.pathname}</span> could not be found. The route ended in a dead zone.
+            </p>
           </div>
 
-          <div className="mt-2 flex items-center justify-center gap-2">
-            <span className="h-2 w-2 animate-pulse-soft rounded-full bg-danger" />
-            <span className="font-mono text-xs uppercase tracking-[0.2em] text-danger/80">
-              ERR_RESOURCE_NOT_FOUND
-            </span>
-          </div>
-
-          <h2 className="mt-8 text-2xl font-semibold text-white sm:text-3xl">
-            Page not found
-          </h2>
-          <p className="mx-auto mt-3 max-w-md text-ink-300">
-            The page you're looking for doesn't exist or has moved.
-          </p>
-
-          {/* Terminal block */}
-          <div className="mx-auto mt-10 max-w-lg">
-            <div className="card overflow-hidden text-left">
-              <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
-                <span className="h-3 w-3 rounded-full bg-danger/80" />
-                <span className="h-3 w-3 rounded-full bg-warning/80" />
-                <span className="h-3 w-3 rounded-full bg-success/80" />
-                <span className="ml-2 font-mono text-xs text-ink-400">soteria@edge: ~/trace</span>
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+            <div className="space-y-6">
+              <div className="rounded-[2rem] border border-white/10 bg-slate-900/80 p-10 shadow-[0_30px_90px_rgba(15,23,42,0.4)] backdrop-blur-xl">
+                <p className="text-sm uppercase tracking-[0.35em] text-cyan-300/80">Lost packet</p>
+                <h2 className="mt-4 text-3xl font-semibold text-white">Try navigating back or scanning another path.</h2>
+                <p className="mt-4 text-slate-400">
+                  This page was not found by the router. Hover and move your cursor to keep an eye on the network trace.
+                </p>
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <Link to="/" className="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">
+                    <Home className="h-4 w-4" />
+                    Back home
+                  </Link>
+                  <Link to="/unobfuscated" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:border-cyan-400 hover:text-cyan-300">
+                    <ArrowRight className="h-4 w-4" />
+                    View unobfuscated scripts
+                  </Link>
+                </div>
               </div>
-              <div className="space-y-1.5 p-5">
-                <TerminalLine prompt="$" delay={200}>
-                  <span className="text-warning">trace</span>{' '}
-                  <span className="text-ink-200">--route</span>{' '}
-                  <span className="text-danger">{window.location.pathname}</span>
-                </TerminalLine>
-                <TerminalLine prompt=">" delay={500}>
-                  Scanning route registry...
-                </TerminalLine>
-                <TerminalLine prompt=">" delay={800}>
-                  <span className="text-danger">FAIL</span> — no matching handler registered
-                </TerminalLine>
-                <TerminalLine prompt=">" delay={1100}>
-                  <span className="text-ink-400">0 routes matched · 1 dead end · status </span>
-                  <span className="text-danger">404</span>
-                </TerminalLine>
-                <TerminalLine prompt="$" delay={1500}>
-                  <span className="text-success">_</span>
-                  <span className="ml-0.5 inline-block h-4 w-2 translate-y-0.5 animate-cursor-blink bg-brand-400" />
-                </TerminalLine>
+
+              <InteractiveCard path={location.pathname} />
+            </div>
+
+            <div className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-900/80 p-10 shadow-[0_40px_120px_rgba(15,23,42,0.5)]">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-400 opacity-70" />
+              <div className="relative">
+                <div className="mb-6 text-sm uppercase tracking-[0.35em] text-slate-500">Interactive diagnostics</div>
+                <div className="grid gap-4">
+                  <div className="rounded-3xl bg-slate-950/85 p-6 text-slate-300 shadow-inner shadow-slate-950/40">
+                    <p className="text-sm uppercase tracking-[0.3em] text-slate-500">status</p>
+                    <p className="mt-3 text-4xl font-black text-white">404</p>
+                    <p className="mt-2 text-slate-400">Route not found</p>
+                  </div>
+                  <div className="rounded-3xl bg-slate-950/85 p-6 text-slate-300 shadow-inner shadow-slate-950/40">
+                    <p className="text-sm uppercase tracking-[0.3em] text-slate-500">next step</p>
+                    <p className="mt-3 text-lg font-semibold text-white">Return to the dashboard or explore scripts directly.</p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-
-          {/* Actions */}
-          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link to="/" className="btn-primary group">
-              <Home className="h-4 w-4" />
-              Back home
-            </Link>
-            <Link to="/unobfuscated" className="btn-outline group">
-              <Terminal className="h-4 w-4" />
-              View unobfuscated scripts
-            </Link>
           </div>
         </div>
       </div>
