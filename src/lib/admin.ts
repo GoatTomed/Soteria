@@ -1,5 +1,5 @@
 export async function createUserAdmin(username: string, password: string) {
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`;
+  const url = `${supabaseUrl}/functions/v1/admin-create-user`;
   // Debug: log request target to help diagnose 405s in-browser
   try { console.debug('[createUserAdmin] POST', url); } catch {}
 
