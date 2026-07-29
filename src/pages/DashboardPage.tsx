@@ -166,7 +166,7 @@ function ObfuscateFiles() {
 
     let obfuscated: string;
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://rcxgbxxfmslxhbeftcwt.supabase.co';
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bcedukdmqieckhpsrrcx.supabase.co';
       const res = await fetch(`${supabaseUrl}/functions/v1/wearedevs-obfuscate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
