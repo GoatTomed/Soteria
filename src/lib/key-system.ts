@@ -405,18 +405,5 @@ function escapeLuaContent(content: string): string {
 export function generateWrappedKeySystemLua(ownerUsername: string | null, scriptId: string, content: string): string {
   const wrapper = generateKeySystemLua(ownerUsername, scriptId);
   const escaped = escapeLuaContent(content);
-  return `${wrapper}
-local __SOTERIA_ORIGINAL = [====[${escaped}]====]
-__soteria_on_gate_success = function()
-  local loader = loadstring or load
-  local fn, err = pcall(function() return loader(__SOTERIA_ORIGINAL) end)
-  if not fn then
-    warn(err or "Failed to load wrapped script")
-    return
-  end
-  local ok, result = pcall(function() return fn() end)
-  if not ok then
-    warn(result or "Wrapped script failed")
-  end
-end`;
+  return `${wrapper}\nlocal __SOTERIA_ORIGINAL = "${escaped}"\n__soteria_on_gate_success = function()\n  local loader = loadstring or load\n  local fn, err = loader(__SOTERIA_ORIGINAL)\n  if not fn then\n    warn(err or \"Failed to load wrapped script\")\n    return\n  end\n  local ok, result = pcall(fn)\n  if not ok then\n    warn(result or \"Wrapped script failed\")\n  end\nend`;
 }
