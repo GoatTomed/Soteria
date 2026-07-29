@@ -4,7 +4,7 @@ import { DashboardShell, TabButton, PageTitle, Card } from '@/components/Dashboa
 import { supabase, type Service, type Script, type Key, type Integration, type File } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { generateSlug, unobfuscateExternal } from '@/lib/obfuscate';
-import { generateKeySystemLua } from '@/lib/key-system';
+import { generateKeySystemLua, generateWrappedKeySystemLua } from '@/lib/key-system';
 import {
   Search, ChevronDown, Plus, Link2, FileCode2, Eye, Sparkles,
   ShieldCheck, Trash2, Copy, Check, X, RefreshCw, Power, PowerOff,
@@ -159,10 +159,7 @@ function ObfuscateFiles() {
     setObfuscating(file.id);
     const original = file.content || '';
     const owner = (user?.email ? user.email.split('@')[0].toLowerCase() : 'soteria');
-    const keySystem = generateKeySystemLua(owner, file.id);
-    const esc = original.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r/g, '\\r').replace(/\n/g, '\\n');
-    const wrapped = `local __SOTERIA_ORIGINAL = "${esc}"\nfunction __soteria_run_original() local f, err = loadstring(__SOTERIA_ORIGINAL) if not f then return end pcall(f) end`;
-    const combined = keySystem + '\n' + wrapped;
+    const combined = generateWrappedKeySystemLua(owner, file.id, original);
 
     let obfuscated: string;
     try {
@@ -230,7 +227,7 @@ function ObfuscateFiles() {
     if (selected?.id === id) setSelected(null);
   };
 
-  const loadstringUrl = (slug: string) => `https://yousoteria.vercel.app/${slug}`;
+  const loadstringUrl = (slug: string) => `${import.meta.env.VITE_SUPABASE_URL || 'https://bcedukdmqieckhpsrrcx.supabase.co'}/functions/v1/serve-script/${slug}`;
   const loadstringCode = (slug: string) => `loadstring(game:HttpGet("${loadstringUrl(slug)}"))()`;
 
   const copy = (text: string) => {
@@ -731,40 +728,93 @@ function OracleServices() {
   );
 }
 
+function isAttachableIntegration(integration: Integration): boolean {
+  if (!integration.service_id) return false;
+  const status = (integration.status || '').trim().toLowerCase();
+  if (!status) return true;
+  return ['connected', 'active', 'enabled', 'ready', 'available', 'online', 'linked'].includes(status);
+}
+
 function OracleScripts() {
+  const { user } = useAuth();
   const [scripts, setScripts] = useState<Script[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showNew, setShowNew] = useState(false);
+  const [showAttachPrompt, setShowAttachPrompt] = useState(false);
   const [newName, setNewName] = useState('');
   const [newContent, setNewContent] = useState('');
   const [newService, setNewService] = useState('');
   const [editingScript, setEditingScript] = useState<Script | null>(null);
+  const [attachTargetService, setAttachTargetService] = useState('');
+
+  const owner = (user?.email ? user.email.split('@')[0].toLowerCase() : 'soteria');
+
+  const wrapScriptForService = useCallback((content: string, serviceId: string | null, scriptId: string | null) => {
+    if (!serviceId || !scriptId) return content;
+    if (content.includes('__SOTERIA_ORIGINAL') || content.includes('-- Soteria Key System')) return content;
+    return generateWrappedKeySystemLua(owner, scriptId, content);
+  }, [owner]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [sRes, svcRes] = await Promise.all([
+    const [sRes, svcRes, intRes] = await Promise.all([
       supabase.from('scripts').select('*').order('updated_at', { ascending: false }),
       supabase.from('services').select('*'),
+      supabase.from('integrations').select('*').order('created_at', { ascending: false }),
     ]);
     setScripts((sRes.data as Script[]) ?? []);
     setServices((svcRes.data as Service[]) ?? []);
+    setIntegrations((intRes.data as Integration[]) ?? []);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const filtered = scripts.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
+  const attachableServices = services.filter(service => integrations.some(integration => integration.service_id === service.id && isAttachableIntegration(integration)));
+
+  const openNewScript = () => {
+    if (!editingScript && attachableServices.length > 0) {
+      setAttachTargetService(attachableServices[0]?.id ?? '');
+      setShowAttachPrompt(true);
+      setShowNew(false);
+      return;
+    }
+    setShowAttachPrompt(false);
+    setShowNew(true);
+  };
 
   const createScript = async () => {
     if (!newName.trim()) return;
+
+    const rawContent = newContent || '-- empty';
+    const serviceId = newService || null;
+
     if (editingScript) {
-      const { data } = await supabase.from('scripts').update({ name: newName, content: newContent || '-- empty', service_id: newService || null }).eq('id', editingScript.id).select('*');
+      const wrappedContent = wrapScriptForService(rawContent, serviceId, editingScript.id);
+      const { data } = await supabase.from('scripts').update({
+        name: newName,
+        content: wrappedContent,
+        service_id: serviceId,
+      }).eq('id', editingScript.id).select('*');
       if (data) setScripts(prev => prev.map(s => s.id === editingScript.id ? data[0] as Script : s));
     } else {
-      const { data } = await supabase.from('scripts').insert({ name: newName, content: newContent || '-- empty', service_id: newService || null }).select('*');
-      if (data) setScripts(prev => [data[0] as Script, ...prev]);
+      const { data: created } = await supabase.from('scripts').insert({
+        name: newName,
+        content: rawContent,
+        service_id: serviceId,
+      }).select('*');
+
+      if (created?.[0]) {
+        const scriptId = created[0].id;
+        const wrappedContent = wrapScriptForService(rawContent, serviceId, scriptId);
+        const { data: updated } = await supabase.from('scripts').update({ content: wrappedContent }).eq('id', scriptId).select('*');
+        if (updated) setScripts(prev => [updated[0] as Script, ...prev]);
+      }
     }
+
     setShowNew(false); setNewName(''); setNewContent(''); setNewService(''); setEditingScript(null);
   };
 
@@ -782,19 +832,47 @@ function OracleScripts() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
           <input value={search} onChange={e => setSearch(e.target.value)} className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] pl-8 pr-3 text-sm text-white placeholder:text-white/30 outline-none" placeholder="Search scripts..." />
         </div>
-        <button onClick={() => setShowNew(true)} className="h-9 px-4 rounded-full bg-white text-black text-sm font-medium hover:bg-white/90 flex items-center gap-2 whitespace-nowrap">
+        <button onClick={openNewScript} className="h-9 px-4 rounded-full bg-white text-black text-sm font-medium hover:bg-white/90 flex items-center gap-2 whitespace-nowrap">
           <Plus className="h-4 w-4" /> New
         </button>
       </div>
 
+      {showAttachPrompt && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <Card className="w-full max-w-lg p-6 space-y-4 border border-white/10 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10">
+                <Link2 className="h-5 w-5 text-white" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-white">Attach this script to an existing service integration?</p>
+                <p className="text-sm text-white/60">You already have a service with a connected integration. You can attach the new script to it and wrap it with the key system automatically.</p>
+              </div>
+            </div>
+            <select value={attachTargetService} onChange={(e) => setAttachTargetService(e.target.value)} style={{ colorScheme: 'dark' }} className="w-full h-10 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none">
+              <option value="">Choose a service</option>
+              {attachableServices.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}
+            </select>
+            <div className="flex gap-2">
+              <button onClick={() => { setShowAttachPrompt(false); setNewService(attachTargetService); setShowNew(true); }} className="h-9 px-4 rounded-full bg-white text-black text-sm font-medium hover:bg-white/90">Yes, attach it</button>
+              <button onClick={() => { setShowAttachPrompt(false); setNewService(''); setShowNew(true); }} className="h-9 px-4 rounded-full border border-white/10 text-sm text-white/60 hover:text-white">No, create normally</button>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {showNew && (
-        <Card className="p-5 space-y-3">
+        <Card className="p-5 space-y-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-white">Create a new script</p>
+            <p className="text-xs text-white/40">Paste the script content below. If you attach it to a service, it will be wrapped with the key system automatically.</p>
+          </div>
           <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Script name" className="w-full h-9 rounded-md border border-white/10 bg-white/[0.02] px-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20" />
           <select value={newService} onChange={e => setNewService(e.target.value)} style={{ colorScheme: 'dark' }} className="w-full h-9 rounded-md border border-white/10 bg-[#1a1a1a] px-3 text-sm text-white outline-none">
             <option value="">No service</option>
             {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <textarea value={newContent} onChange={e => setNewContent(e.target.value)} placeholder="-- Script content" rows={5} className="w-full rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20 font-mono" />
+          <textarea value={newContent} onChange={e => setNewContent(e.target.value)} placeholder="-- Paste your script content here" rows={6} className="w-full rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20 font-mono" />
           <div className="flex gap-2">
             <button onClick={createScript} className="h-9 px-4 rounded-full bg-white text-black text-sm font-medium hover:bg-white/90">Create</button>
             <button onClick={() => setShowNew(false)} className="h-9 px-4 rounded-full border border-white/10 text-sm text-white/60 hover:text-white">Cancel</button>
