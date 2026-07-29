@@ -78,7 +78,7 @@ export function GatePage() {
 
     setIntegrations(filtered);
     setState('ready');
-  }, [owner, scriptId]);
+  }, [owner]);
 
   useEffect(() => { load(); }, [load]);
 
