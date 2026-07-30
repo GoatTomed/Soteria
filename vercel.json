@@ -1,7 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    { "source": "/:id(\\d+)", "destination": "https://qqnnaknwszrigxwrlvxd.supabase.co/functions/v1/serve-script/:id" },
+    { "source": "/api/verify-key", "destination": "https://bcedukdmqieckhpsrrcx.supabase.co/functions/v1/verify-gate" },
+    { "source": "/api/verify-gate", "destination": "https://bcedukdmqieckhpsrrcx.supabase.co/functions/v1/verify-gate" },
+    { "source": "/:id(\\d+)", "destination": "https://bcedukdmqieckhpsrrcx.supabase.co/functions/v1/serve-script/:id" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }

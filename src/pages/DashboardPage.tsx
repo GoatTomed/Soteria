@@ -170,7 +170,8 @@ function generateKey(): string {
 
 function generateVerificationUrl(): string {
   const slug = generateSlug();
-  return `https://yousoteria.vercel.app/verify/${slug}`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://yoursuck.vercel.app';
+  return `${origin}/verify/${slug}`;
 }
 
 /* ============ Obfuscate ============ */
